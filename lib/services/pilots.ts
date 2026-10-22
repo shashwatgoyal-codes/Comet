@@ -13,6 +13,7 @@ import {
   upsertPilotLocation,
 } from "@/lib/repositories/pilot-locations";
 import { findPilotProfile } from "@/lib/repositories/pilots";
+import { dispatchDueScheduledRides } from "@/lib/services/scheduling";
 import {
   addRideEvent,
   assignRide,
@@ -100,6 +101,7 @@ export async function listOpenOffers(
   pilotId: string,
   now: Date = new Date(),
 ): Promise<OfferView[]> {
+  await dispatchDueScheduledRides(now);
   const location = await getPilotLocation(pilotId);
   const offers = await findOpenOffersForPilot(pilotId, now);
   for (const o of offers) await refreshRequestedRide(o.ride, now);

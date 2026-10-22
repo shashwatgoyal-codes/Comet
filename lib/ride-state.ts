@@ -4,13 +4,15 @@
  * The same table is enforced by a trigger in the database
  * (enforce_ride_transition); tests check that the two agree.
  *
- *   requested ─► accepted ─► arrived ─► in_progress ─► completed
+ *   scheduled ─► requested ─► accepted ─► arrived ─► in_progress ─► completed
+ *       │ (15 min before pickup)
  *       │            │          │
  *       ├─► expired  ├─► cancelled  ├─► cancelled
  *       └─► cancelled            └─► no_show
  */
 
 export const RIDE_STATUSES = [
+  "scheduled",
   "requested",
   "accepted",
   "arrived",
@@ -30,6 +32,7 @@ export const ACTIVE_STATUSES: readonly RideStatus[] = [
 ];
 
 export const TRANSITIONS: Record<RideStatus, readonly RideStatus[]> = {
+  scheduled: ["requested", "cancelled", "expired"],
   requested: ["accepted", "cancelled", "expired"],
   accepted: ["arrived", "cancelled"],
   arrived: ["in_progress", "cancelled", "no_show"],

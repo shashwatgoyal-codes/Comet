@@ -26,6 +26,8 @@ import { isActive, type RideStatus } from "@/lib/ride-state";
 import { offerNextWave, refreshRequestedRide } from "@/lib/services/matching";
 import { getValidQuote } from "@/lib/services/quotes";
 import { isVerifiedFemale } from "@/lib/services/women-only";
+import { dispatchDueScheduledRides } from "@/lib/services/scheduling";
+import { MAX_UPCOMING, isValidPickupTime } from "@/lib/scheduling";
 import { findPromo, toRule, usesByRider } from "@/lib/services/promos";
 import { evaluatePromo } from "@/lib/promos";
 import { db } from "@/lib/db";
@@ -60,6 +62,7 @@ export type RideView = {
   paymentStatus: "pending" | "paid" | "failed" | "refunded" | "waived";
   isDemo: boolean;
   womenOnly: boolean;
+  scheduledFor: string | null;
   requestedAt: string;
   arrivedAt: string | null;
   startedAt: string | null;
@@ -103,6 +106,7 @@ export async function toRideView(ride: RideWithPilot, forRider: boolean): Promis
     paymentStatus: ride.paymentStatus,
     isDemo: ride.isDemo,
     womenOnly: ride.womenOnly,
+    scheduledFor: ride.scheduledFor?.toISOString() ?? null,
     requestedAt: ride.requestedAt.toISOString(),
     arrivedAt: ride.arrivedAt?.toISOString() ?? null,
     startedAt: ride.startedAt?.toISOString() ?? null,
@@ -137,6 +141,8 @@ export type BookInput = {
   /** Only verified women Pilots. Needs the rider to be verified too. */
   womenOnly?: boolean;
   promoCode?: string | null;
+  /** Book ahead: the pickup time, on a quarter hour (lib/scheduling.ts). */
+  scheduledFor?: Date | null;
 };
 
 /** Books a ride from a locked quote and offers it to the first wave. */
@@ -144,7 +150,22 @@ export async function bookRide(riderId: string, input: BookInput, now: Date = ne
   const rider = await findUser(riderId);
   if (!rider) throw new AppError("UNAUTHENTICATED", "Please sign in again.");
 
-  const existing = await findActiveRideForRider(riderId);
+  const scheduledFor = input.scheduledFor ?? null;
+  if (scheduledFor) {
+    if (!isValidPickupTime(scheduledFor, now)) {
+      throw new AppError(
+        "VALIDATION",
+        "Pick a time on the quarter hour, from 30 minutes ahead to 3 days from now.",
+      );
+    }
+    const upcoming = await db.ride.count({ where: { riderId, status: "scheduled" } });
+    if (upcoming >= MAX_UPCOMING) {
+      throw new AppError("VALIDATION", `You can have up to ${MAX_UPCOMING} rides booked ahead.`);
+    }
+  }
+
+  // A ride booked ahead doesn't need you to be free right now.
+  const existing = scheduledFor ? null : await findActiveRideForRider(riderId);
   if (existing) {
     throw new AppError("CONFLICT", "You already have a ride in progress.");
   }
@@ -216,6 +237,7 @@ export async function bookRide(riderId: string, input: BookInput, now: Date = ne
         isDemo: rider.isDemo,
         womenOnly: input.womenOnly ?? false,
         requestedAt: now,
+        ...(scheduledFor ? { status: "scheduled" as const, scheduledFor } : {}),
       },
       { actorId: riderId, type: "ride.requested" },
     );
@@ -237,8 +259,9 @@ export async function bookRide(riderId: string, input: BookInput, now: Date = ne
       },
     });
   }
-  await offerNextWave(ride, now);
-  return { rideId: ride.id };
+  // Booked ahead: Pilots see it 15 minutes before pickup (dispatchDueScheduledRides).
+  if (!scheduledFor) await offerNextWave(ride, now);
+  return { rideId: ride.id, scheduled: scheduledFor !== null };
 }
 
 /** The rider's active ride, moved along if it's still waiting for a Pilot. */
@@ -246,6 +269,7 @@ export async function getRiderActiveRide(
   riderId: string,
   now: Date = new Date(),
 ): Promise<RideView | null> {
+  await dispatchDueScheduledRides(now);
   let ride = await findActiveRideForRider(riderId);
   if (!ride) return null;
   if (ride.status === "requested") {
@@ -295,13 +319,13 @@ export async function cancelRideAsRider(
   const ride = await findRideForParticipant(riderId, rideId);
   if (!ride || ride.riderId !== riderId)
     throw new AppError("NOT_FOUND", "That ride doesn't exist.");
-  if (ride.status !== "requested" && ride.status !== "accepted" && ride.status !== "arrived") {
+  if (!["scheduled", "requested", "accepted", "arrived"].includes(ride.status)) {
     throw new AppError("CONFLICT", "This ride can't be cancelled now.");
   }
 
   const fee = cancellationFee({ status: ride.status, requestedAt: ride.requestedAt, now, reason });
   const label = CANCEL_REASONS.find((r) => r.id === reason)?.label ?? "Cancelled by rider";
-  const ok = await transitionRide(ride.id, ride.status, {
+  const ok = await transitionRide(ride.id, ride.status as RideStatus, {
     status: "cancelled",
     cancelledAt: now,
     cancelledBy: "rider",

@@ -8,7 +8,7 @@ import { VehicleIcon } from "@/components/icons/Vehicle";
 import { RiderTabBar } from "@/components/RiderTabBar";
 import { requireUser } from "@/lib/auth/session";
 import { RIDE_TIERS, TIER_RATES } from "@/lib/fares";
-import { getRatingPrompt } from "@/lib/services/history";
+import { getNextScheduled, getRatingPrompt } from "@/lib/services/history";
 import { getRiderCurrentRide } from "@/lib/services/rides";
 
 import { HomeMap } from "./HomeMap";
@@ -35,6 +35,7 @@ export default async function RideHomePage() {
   const firstName = user.displayName.split(" ")[0];
   const activeRide = await getRiderCurrentRide(user.id);
   const toRate = activeRide ? null : await getRatingPrompt(user.id);
+  const nextScheduled = activeRide ? null : await getNextScheduled(user.id);
 
   return (
     <AppShell app="rider" active="/ride" layout="map" initial={firstName?.[0]}>
@@ -75,6 +76,24 @@ export default async function RideHomePage() {
                   : activeRide.status === "completed"
                     ? `Pay for your ride to ${activeRide.drop.address}`
                     : "Your ride is in progress"}
+                <span className="text-sm">View →</span>
+              </Link>
+            )}
+
+            {nextScheduled?.scheduledFor && (
+              <Link
+                href={`/ride/activity/${nextScheduled.id}`}
+                className="flex items-center justify-between gap-3 rounded-lg bg-info-soft px-4 py-3.5 font-semibold text-info"
+              >
+                <span className="truncate">
+                  Booked: {nextScheduled.dropAddress} ·{" "}
+                  {new Intl.DateTimeFormat("en-IN", {
+                    weekday: "short",
+                    hour: "numeric",
+                    minute: "2-digit",
+                    timeZone: "Asia/Kolkata",
+                  }).format(nextScheduled.scheduledFor)}
+                </span>
                 <span className="text-sm">View →</span>
               </Link>
             )}

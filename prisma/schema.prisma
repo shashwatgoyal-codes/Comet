@@ -224,6 +224,7 @@ model PilotLocation {
 // ------------------------------------------------------------------ rides
 
 enum RideStatus {
+  scheduled
   requested
   accepted
   arrived
@@ -319,6 +320,9 @@ model Ride {
   rideCode             String        @map("ride_code") @db.Char(4)
   rideCodeAttempts     Int           @default(0) @map("ride_code_attempts")
   womenOnly            Boolean       @default(false) @map("women_only")
+  /// For a ride booked ahead: the pickup time. It's offered to Pilots 15
+  /// minutes before (lib/scheduling.ts).
+  scheduledFor         DateTime?     @map("scheduled_for") @db.Timestamptz
   isDemo               Boolean       @default(false) @map("is_demo")
   simulationStartedAt  DateTime?     @map("simulation_started_at") @db.Timestamptz
   requestedAt          DateTime      @default(now()) @map("requested_at") @db.Timestamptz

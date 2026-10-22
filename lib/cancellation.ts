@@ -36,7 +36,8 @@ export function cancellationFee(input: {
   now: Date;
   reason: CancelReasonId | null;
 }): Paise {
-  if (input.status === "requested") return 0;
+  // Nobody has set off yet: searching, or booked ahead and not yet released.
+  if (input.status === "requested" || input.status === "scheduled") return 0;
   const reason = CANCEL_REASONS.find((r) => r.id === input.reason);
   if (reason?.waivesFee) return 0;
   const sinceBookingS = (input.now.getTime() - input.requestedAt.getTime()) / 1000;

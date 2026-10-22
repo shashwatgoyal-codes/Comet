@@ -2,6 +2,7 @@ import "server-only";
 
 import type { RideStatus } from "@prisma/client";
 
+import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import type { RideTier } from "@/lib/fares";
 import {
@@ -11,6 +12,7 @@ import {
   listRiderRides,
 } from "@/lib/repositories/rides";
 import { toRideView, type RideView } from "@/lib/services/rides";
+import { dispatchDueScheduledRides } from "@/lib/services/scheduling";
 
 /**
  * "10 · Ride history" and "11 · Receipt" (docs/PRD.md F7, docs/API.md
@@ -21,8 +23,7 @@ export type HistoryTab = "past" | "upcoming" | "cancelled";
 
 const TAB_STATUSES: Record<HistoryTab, RideStatus[]> = {
   past: ["completed"],
-  // Scheduled rides arrive with phase 9; until then nothing is upcoming.
-  upcoming: [],
+  upcoming: ["scheduled"],
   cancelled: ["cancelled", "expired", "no_show"],
 };
 
@@ -56,7 +57,7 @@ export async function listRides(
   cursor: string | null,
 ): Promise<{ items: HistoryItem[]; nextCursor: string | null }> {
   const statuses = TAB_STATUSES[tab];
-  if (statuses.length === 0) return { items: [], nextCursor: null };
+  if (tab === "upcoming") await dispatchDueScheduledRides();
   const rows = await listRiderRides(riderId, statuses, cursor, PAGE + 1);
   const page = rows.slice(0, PAGE);
   return {
@@ -65,7 +66,10 @@ export async function listRides(
       drop: r.dropAddress,
       tier: r.tier as RideTier,
       status: r.status,
-      at: (r.completedAt ?? r.cancelledAt ?? r.requestedAt).toISOString(),
+      at: (r.scheduledFor && r.status === "scheduled"
+        ? r.scheduledFor
+        : (r.completedAt ?? r.cancelledAt ?? r.requestedAt)
+      ).toISOString(),
       totalPaise: r.totalPaise + r.tipPaise,
       paymentMethod: r.paymentMethod,
       paymentStatus: r.paymentStatus,
@@ -105,4 +109,13 @@ export async function getReceipt(riderId: string, rideId: string): Promise<Recei
 /** For the home screen's "Rate your ride" prompt: unrated rides from the last day. */
 export async function getRatingPrompt(riderId: string, now: Date = new Date()) {
   return findUnratedRecentRide(riderId, new Date(now.getTime() - 86_400_000));
+}
+
+/** The rider's next ride booked ahead, for the home screen. */
+export async function getNextScheduled(riderId: string) {
+  return db.ride.findFirst({
+    where: { riderId, status: "scheduled" },
+    orderBy: { scheduledFor: "asc" },
+    select: { id: true, dropAddress: true, scheduledFor: true },
+  });
 }

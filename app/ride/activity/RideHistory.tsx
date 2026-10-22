@@ -30,6 +30,7 @@ const when = new Intl.DateTimeFormat("en-IN", {
 const month = new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric" });
 
 function statusLine(r: HistoryItem): string {
+  if (r.status === "scheduled") return "Booked ahead · Pilot assigned 15 min before";
   if (r.status === "completed") {
     return r.paymentStatus === "paid"
       ? `Completed · ${PAYMENT_METHOD_LABELS[r.paymentMethod as PaymentMethod]}`
@@ -86,12 +87,13 @@ function Sketch({ points, muted }: { points: [number, number][]; muted: boolean 
   );
 }
 
-export function RideHistory({ initial }: { initial: Page }) {
-  const [tab, setTab] = useState<HistoryTab>("past");
+export function RideHistory({ initial, initialTab }: { initial: Page; initialTab: HistoryTab }) {
+  const [tab, setTab] = useState<HistoryTab>(initialTab);
   const [pages, setPages] = useState<Record<HistoryTab, Page | null>>({
-    past: initial,
+    past: null,
     upcoming: null,
     cancelled: null,
+    [initialTab]: initial,
   });
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -172,7 +174,7 @@ export function RideHistory({ initial }: { initial: Page }) {
               const header = month.format(new Date(r.at));
               const showHeader =
                 i === 0 || month.format(new Date(page.items[i - 1]!.at)) !== header;
-              const ended = r.status !== "completed";
+              const ended = r.status !== "completed" && r.status !== "scheduled";
               return (
                 <li key={r.id} className="flex flex-col gap-1.5">
                   {showHeader && (
@@ -193,7 +195,11 @@ export function RideHistory({ initial }: { initial: Page }) {
                       <span
                         className={cn(
                           "text-xs font-semibold",
-                          ended ? "text-danger-text" : "text-muted-foreground",
+                          ended
+                            ? "text-danger-text"
+                            : r.status === "scheduled"
+                              ? "text-info"
+                              : "text-muted-foreground",
                         )}
                       >
                         {statusLine(r)}

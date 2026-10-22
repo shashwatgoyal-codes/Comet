@@ -35,9 +35,17 @@ describe("ride state machine", () => {
 
   it("terminal states have no way out, active ones do", () => {
     for (const s of RIDE_STATUSES) {
+      // A scheduled ride is neither: waiting, not yet live, not finished.
+      if (s === "scheduled") continue;
       expect(isTerminal(s)).toBe(!ACTIVE_STATUSES.includes(s));
       expect(isActive(s)).toBe(ACTIVE_STATUSES.includes(s));
     }
+  });
+
+  it("a scheduled ride isn't active (it doesn't block booking now) and isn't finished", () => {
+    expect(isActive("scheduled")).toBe(false);
+    expect(isTerminal("scheduled")).toBe(false);
+    expect(TRANSITIONS.scheduled).toEqual(["requested", "cancelled", "expired"]);
   });
 
   it("every transition target is a known status", () => {

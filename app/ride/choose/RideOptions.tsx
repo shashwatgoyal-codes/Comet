@@ -2,6 +2,7 @@
 
 import {
   Banknote,
+  CalendarClock,
   ChevronRight,
   CreditCard,
   ShieldCheck,
@@ -23,6 +24,16 @@ import { PAYMENT_METHOD_LABELS, PAYMENT_METHODS, type PaymentMethod } from "@/li
 
 import { bookRideAction } from "../actions";
 import { PromoSheet, outcomeFor } from "./PromoSheet";
+import { SchedulePicker } from "./SchedulePicker";
+
+const pickupLabel = new Intl.DateTimeFormat("en-IN", {
+  weekday: "short",
+  day: "numeric",
+  month: "short",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "Asia/Kolkata",
+});
 
 const METHOD_ICONS = { wallet: Wallet, upi: Smartphone, card: CreditCard, cash: Banknote };
 const METHOD_NOTES: Record<PaymentMethod, string> = {
@@ -72,6 +83,8 @@ export function RideOptions({
   const [womenOnly, setWomenOnly] = useState(womenOnlyDefault ?? false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [scheduledFor, setScheduledFor] = useState<Date | null>(null);
+  const [scheduling, setScheduling] = useState(false);
 
   function book() {
     setError(null);
@@ -82,9 +95,10 @@ export function RideOptions({
         paymentMethod: method,
         womenOnly,
         promoCode: current?.ok ? promo?.code : null,
+        scheduledFor: scheduledFor?.toISOString() ?? null,
       });
       if (result.ok) {
-        router.push("/ride/trip");
+        router.push(result.data.scheduled ? "/ride/activity?tab=upcoming" : "/ride/trip");
         return;
       }
       if (
@@ -242,13 +256,43 @@ export function RideOptions({
           {error}
         </p>
       )}
-      <Button
-        onClick={book}
-        disabled={pending || short}
-        className="h-14 rounded-lg text-[17px] font-bold"
-      >
-        {pending ? "Booking…" : `Book ${TIER_RATES[tier].label}`}
-      </Button>
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          onClick={() => setScheduling(true)}
+          aria-label={
+            scheduledFor
+              ? `Change pickup time, ${pickupLabel.format(scheduledFor)}`
+              : "Schedule for later"
+          }
+          className="h-14 shrink-0 flex-col gap-0 rounded-lg px-3.5 text-xs font-bold"
+        >
+          <CalendarClock className="size-5" aria-hidden />
+          {scheduledFor ? "Change" : "Later"}
+        </Button>
+        <Button
+          onClick={book}
+          disabled={pending || short}
+          className="h-14 flex-1 flex-col gap-0 rounded-lg text-[17px] font-bold"
+        >
+          {pending
+            ? "Booking…"
+            : scheduledFor
+              ? `Schedule ${TIER_RATES[tier].label}`
+              : `Book ${TIER_RATES[tier].label}`}
+          {scheduledFor && !pending && (
+            <span className="text-xs font-semibold">{pickupLabel.format(scheduledFor)}</span>
+          )}
+        </Button>
+      </div>
+      {scheduling && (
+        <SchedulePicker
+          now={now}
+          value={scheduledFor}
+          onPick={setScheduledFor}
+          onClose={() => setScheduling(false)}
+        />
+      )}
     </>
   );
 }

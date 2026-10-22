@@ -2,15 +2,20 @@
 
 import { ArrowLeft, Printer } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 
 import { LiveMap } from "@/components/map/LiveMap";
 import { RatingForm } from "@/components/RatingForm";
+import { Button } from "@/components/ui/button";
 import { TIER_RATES } from "@/lib/fares";
 import { formatRupees } from "@/lib/money";
 import { starString } from "@/lib/ratings";
 import type { Receipt } from "@/lib/services/history";
+import { cn } from "@/lib/utils";
 import { PAYMENT_METHOD_LABELS } from "@/lib/wallet";
+
+import { cancelRideAction } from "../../actions";
 
 const day = new Intl.DateTimeFormat("en-IN", {
   weekday: "short",
@@ -96,8 +101,19 @@ export function ReceiptView({
           </div>
         </div>
 
+        {ride.status === "scheduled" && ride.scheduledFor && (
+          <ScheduledRide
+            rideId={ride.id}
+            scheduledFor={ride.scheduledFor}
+            farePaise={ride.totalPaise}
+          />
+        )}
+
         <section
-          className="flex flex-col gap-2 rounded-lg bg-card p-3.5 text-sm"
+          className={cn(
+            "flex flex-col gap-2 rounded-lg bg-card p-3.5 text-sm",
+            ride.status === "scheduled" && "hidden",
+          )}
           aria-label="Fare breakdown"
         >
           {completed ? (
@@ -214,5 +230,64 @@ function Line({ label, value }: { label: string; value: string }) {
       <span>{label}</span>
       <span>{value}</span>
     </div>
+  );
+}
+
+const pickupLabel = new Intl.DateTimeFormat("en-IN", {
+  weekday: "long",
+  day: "numeric",
+  month: "short",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "Asia/Kolkata",
+});
+
+/** A ride booked ahead: when, the locked fare, and free cancellation. */
+function ScheduledRide({
+  rideId,
+  scheduledFor,
+  farePaise,
+}: {
+  rideId: string;
+  scheduledFor: string;
+  farePaise: number;
+}) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  return (
+    <section
+      aria-labelledby="scheduled-h"
+      className="flex flex-col gap-3 rounded-lg bg-info-soft p-4"
+    >
+      <span className="text-xs font-bold tracking-widest text-info uppercase">Scheduled</span>
+      <h2 id="scheduled-h" className="font-heading text-lg font-bold" data-testid="scheduled-for">
+        {pickupLabel.format(new Date(scheduledFor))}
+      </h2>
+      <p className="text-sm text-muted-foreground">
+        We&apos;ll assign your Pilot 15 minutes before pickup. Your fare is locked at{" "}
+        <b className="text-foreground">{formatRupees(farePaise)}</b>, and cancelling is free until
+        then.
+      </p>
+      {error && (
+        <p role="alert" className="text-sm font-semibold text-danger-text">
+          {error}
+        </p>
+      )}
+      <Button
+        variant="outline"
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => {
+            const result = await cancelRideAction({ rideId, reason: "plans_changed" });
+            if (!result.ok) setError(result.message);
+            router.refresh();
+          })
+        }
+        className="h-12 rounded-md bg-card font-bold text-danger-text"
+      >
+        {pending ? "Cancelling…" : "Cancel this ride · free"}
+      </Button>
+    </section>
   );
 }

@@ -14,6 +14,12 @@ export const bookRideSchema = z.object({
   paymentMethod: z.enum(PAYMENT_METHODS),
   womenOnly: z.boolean().default(false),
   promoCode: z.string().trim().max(20).nullable().default(null),
+  /** ISO time of a pickup booked ahead; checked against lib/scheduling.ts. */
+  scheduledFor: z.iso
+    .datetime({ offset: true })
+    .transform((v) => new Date(v))
+    .nullable()
+    .default(null),
 });
 
 export const promoLookupSchema = z.object({ code: z.string().trim().min(1).max(20) });
