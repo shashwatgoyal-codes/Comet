@@ -43,7 +43,8 @@ export type WalletEntryKind =
   | "platform_fee"
   | "payout"
   | "cash_change"
-  | "demo_grant";
+  | "demo_grant"
+  | "promo_subsidy";
 
 /** How a ledger entry reads in a transaction list. */
 export function entryTitle(kind: WalletEntryKind, amountPaise: Paise, note: string | null) {
@@ -64,6 +65,8 @@ export function entryTitle(kind: WalletEntryKind, amountPaise: Paise, note: stri
       return amountPaise > 0 ? "Change from cash payment" : "Change credited to rider";
     case "demo_grant":
       return "Welcome credit";
+    case "promo_subsidy":
+      return "Promo discount, paid by Comet";
     case "cancellation_fee":
       return "Cancellation fee";
     case "waiting_fee":

@@ -13,6 +13,9 @@ const port = Number(process.env.E2E_PORT ?? 3100);
 export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: true,
+  // Each test drives one or two browsers against one shared server; past
+  // four at once, server round trips slow enough to flake.
+  workers: 4,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",

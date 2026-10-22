@@ -530,6 +530,12 @@ function TripDone({ ride }: { ride: RideView }) {
             <span>{formatRupees(ride.waitingFeePaise)}</span>
           </div>
         )}
+        {ride.discountPaise > 0 && (
+          <div className="flex justify-between font-semibold text-brand-text">
+            <span>Promo {ride.promoCode}</span>
+            <span>{formatRupees(-ride.discountPaise)}</span>
+          </div>
+        )}
         <div className="h-px bg-border" />
         <div className="flex items-center justify-between">
           <span className="font-bold">Paid · {PAYMENT_METHOD_LABELS[ride.paymentMethod]}</span>
@@ -537,6 +543,11 @@ function TripDone({ ride }: { ride: RideView }) {
             {formatRupees(ride.totalPaise)}
           </span>
         </div>
+        {ride.cashbackPaise > 0 && ride.paymentMethod === "wallet" && (
+          <p className="text-[13px] font-semibold text-info">
+            {ride.promoCode}: {formatRupees(ride.cashbackPaise)} cashback added to your wallet.
+          </p>
+        )}
       </section>
 
       {rated !== null ? (

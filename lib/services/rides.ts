@@ -26,6 +26,9 @@ import { isActive, type RideStatus } from "@/lib/ride-state";
 import { offerNextWave, refreshRequestedRide } from "@/lib/services/matching";
 import { getValidQuote } from "@/lib/services/quotes";
 import { isVerifiedFemale } from "@/lib/services/women-only";
+import { findPromo, toRule, usesByRider } from "@/lib/services/promos";
+import { evaluatePromo } from "@/lib/promos";
+import { db } from "@/lib/db";
 import { chargeCancellation, walletBalance } from "@/lib/repositories/wallet";
 import { announceBalance } from "@/lib/services/wallet";
 import { CANCEL_REASONS, cancellationFee, type CancelReasonId } from "@/lib/cancellation";
@@ -50,6 +53,9 @@ export type RideView = {
   totalPaise: number;
   platformFeePaise: number;
   tipPaise: number;
+  discountPaise: number;
+  cashbackPaise: number;
+  promoCode: string | null;
   paymentMethod: PaymentMethod;
   paymentStatus: "pending" | "paid" | "failed" | "refunded" | "waived";
   isDemo: boolean;
@@ -90,6 +96,9 @@ export async function toRideView(ride: RideWithPilot, forRider: boolean): Promis
     totalPaise: ride.totalPaise,
     platformFeePaise: ride.platformFeePaise,
     tipPaise: ride.tipPaise,
+    discountPaise: ride.discountPaise,
+    cashbackPaise: ride.cashbackPaise,
+    promoCode: ride.promo?.code ?? null,
     paymentMethod: ride.paymentMethod,
     paymentStatus: ride.paymentStatus,
     isDemo: ride.isDemo,
@@ -127,6 +136,7 @@ export type BookInput = {
   paymentMethod: PaymentMethod;
   /** Only verified women Pilots. Needs the rider to be verified too. */
   womenOnly?: boolean;
+  promoCode?: string | null;
 };
 
 /** Books a ride from a locked quote and offers it to the first wave. */
@@ -151,13 +161,30 @@ export async function bookRide(riderId: string, input: BookInput, now: Date = ne
   const fare = prices[input.tier];
   if (typeof fare !== "number") throw new AppError("VALIDATION", "That ride type isn't available.");
 
+  // A promo, checked against the same rules the choose screen previewed.
+  let promo: { id: string; discountPaise: number; cashbackPaise: number } | null = null;
+  if (input.promoCode) {
+    const found = await findPromo(input.promoCode);
+    if (!found) throw new AppError("VALIDATION", "That code isn't valid.");
+    const outcome = evaluatePromo(toRule(found), {
+      tier: input.tier,
+      farePaise: fare,
+      paymentMethod: input.paymentMethod,
+      now,
+      usesByRider: await usesByRider(riderId, found.id),
+    });
+    if (!outcome.ok) throw new AppError("VALIDATION", outcome.reason);
+    promo = { id: found.id, ...outcome };
+  }
+  const total = fare - (promo?.discountPaise ?? 0);
+
   // Checked again when the trip ends: a waiting fee can raise the total.
   if (input.paymentMethod === "wallet") {
     const balance = await walletBalance(riderId);
-    if (balance < fare) {
+    if (balance < total) {
       throw new AppError(
         "INSUFFICIENT_BALANCE",
-        `Your wallet has ${formatRupees(balance)}. Top up ${formatRupees(fare - balance)} or choose another way to pay.`,
+        `Your wallet has ${formatRupees(balance)}. Top up ${formatRupees(total - balance)} or choose another way to pay.`,
       );
     }
   }
@@ -179,7 +206,10 @@ export async function bookRide(riderId: string, input: BookInput, now: Date = ne
         distanceM: quote.distanceM,
         durationS: quote.durationS,
         farePaise: fare,
-        totalPaise: fare,
+        discountPaise: promo?.discountPaise ?? 0,
+        cashbackPaise: promo?.cashbackPaise ?? 0,
+        promoId: promo?.id ?? null,
+        totalPaise: total,
         platformFeePaise: splitFare(fare).platformFee,
         paymentMethod: input.paymentMethod,
         rideCode: String(randomInt(0, 10_000)).padStart(4, "0"),
@@ -197,6 +227,16 @@ export async function bookRide(riderId: string, input: BookInput, now: Date = ne
     throw err;
   }
 
+  if (promo) {
+    await db.promoRedemption.create({
+      data: {
+        promoId: promo.id,
+        userId: riderId,
+        rideId: ride.id,
+        discountPaise: promo.discountPaise,
+      },
+    });
+  }
   await offerNextWave(ride, now);
   return { rideId: ride.id };
 }

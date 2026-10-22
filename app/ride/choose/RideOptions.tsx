@@ -1,6 +1,14 @@
 "use client";
 
-import { Banknote, CreditCard, ShieldCheck, Smartphone, Wallet } from "lucide-react";
+import {
+  Banknote,
+  ChevronRight,
+  CreditCard,
+  ShieldCheck,
+  Smartphone,
+  TicketPercent,
+  Wallet,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -9,10 +17,12 @@ import { VehicleIcon } from "@/components/icons/Vehicle";
 import { Button } from "@/components/ui/button";
 import { RIDE_TIERS, TIER_RATES, type RideTier } from "@/lib/fares";
 import { formatRupees, type Paise } from "@/lib/money";
+import type { PromoOffer } from "@/lib/services/promos";
 import { cn } from "@/lib/utils";
 import { PAYMENT_METHOD_LABELS, PAYMENT_METHODS, type PaymentMethod } from "@/lib/wallet";
 
 import { bookRideAction } from "../actions";
+import { PromoSheet, outcomeFor } from "./PromoSheet";
 
 const METHOD_ICONS = { wallet: Wallet, upi: Smartphone, card: CreditCard, cash: Banknote };
 const METHOD_NOTES: Record<PaymentMethod, string> = {
@@ -33,6 +43,7 @@ export function RideOptions({
   balancePaise,
   returnPath,
   womenOnlyDefault,
+  offers,
 }: {
   quoteId: string;
   prices: Record<RideTier, Paise>;
@@ -40,13 +51,24 @@ export function RideOptions({
   returnPath: string;
   /** null when the rider isn't verified (the switch isn't offered). */
   womenOnlyDefault: boolean | null;
+  offers: PromoOffer[];
 }) {
   const router = useRouter();
   const [tier, setTier] = useState<RideTier>("go");
   const [method, setMethod] = useState<PaymentMethod>(
     balancePaise >= prices.go ? "wallet" : "cash",
   );
-  const short = method === "wallet" && balancePaise < prices[tier];
+  const [promo, setPromo] = useState<PromoOffer | null>(null);
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [now] = useState(() => new Date());
+  const outcomeOn = (t: RideTier) => (promo ? outcomeFor(promo, t, prices[t], method, now) : null);
+  const current = outcomeOn(tier);
+  const discountOn = (t: RideTier) => {
+    const o = outcomeOn(t);
+    return o?.ok ? o.discountPaise : 0;
+  };
+  const payNow = prices[tier] - discountOn(tier);
+  const short = method === "wallet" && balancePaise < payNow;
   const [womenOnly, setWomenOnly] = useState(womenOnlyDefault ?? false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -54,7 +76,13 @@ export function RideOptions({
   function book() {
     setError(null);
     startTransition(async () => {
-      const result = await bookRideAction({ quoteId, tier, paymentMethod: method, womenOnly });
+      const result = await bookRideAction({
+        quoteId,
+        tier,
+        paymentMethod: method,
+        womenOnly,
+        promoCode: current?.ok ? promo?.code : null,
+      });
       if (result.ok) {
         router.push("/ride/trip");
         return;
@@ -100,8 +128,15 @@ export function RideOptions({
                   {t === "go" && " · AC"}
                 </span>
               </span>
-              <span className="font-heading text-[17px] font-bold" data-testid={`price-${t}`}>
-                {formatRupees(prices[t])}
+              <span className="flex flex-col items-end">
+                <span className="font-heading text-[17px] font-bold" data-testid={`price-${t}`}>
+                  {formatRupees(prices[t] - discountOn(t))}
+                </span>
+                {discountOn(t) > 0 && (
+                  <span className="text-xs text-muted-foreground line-through">
+                    {formatRupees(prices[t])}
+                  </span>
+                )}
               </span>
             </button>
           );
@@ -169,6 +204,37 @@ export function RideOptions({
             className="relative h-7 w-12 shrink-0 rounded-full bg-border transition-colors peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring after:absolute after:top-1 after:left-1 after:size-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5"
           />
         </label>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setPromoOpen(true)}
+        className="flex h-12 items-center gap-2.5 rounded-md border border-dashed border-border px-3 text-left text-sm font-semibold"
+      >
+        <TicketPercent className="size-[18px] shrink-0 text-brand-text" aria-hidden />
+        <span className="flex-1">
+          {promo && current?.ok
+            ? current.discountPaise > 0
+              ? `${promo.code} · ${formatRupees(current.discountPaise)} off`
+              : `${promo.code} · ${formatRupees(current.cashbackPaise)} cashback`
+            : "Offers & promo codes"}
+        </span>
+        <ChevronRight className="size-4 text-muted-foreground" aria-hidden />
+      </button>
+      {promo && current && !current.ok && (
+        <p className="-mt-1 text-[13px] font-semibold text-danger-text">{current.reason}</p>
+      )}
+      {promoOpen && (
+        <PromoSheet
+          offers={offers}
+          applied={promo}
+          tier={tier}
+          farePaise={prices[tier]}
+          method={method}
+          now={now}
+          onApply={setPromo}
+          onClose={() => setPromoOpen(false)}
+        />
       )}
 
       {error && (

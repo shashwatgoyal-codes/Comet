@@ -106,8 +106,17 @@ export function ReceiptView({
               {ride.waitingFeePaise > 0 && (
                 <Line label="Waiting time" value={formatRupees(ride.waitingFeePaise)} />
               )}
+              {ride.discountPaise > 0 && (
+                <Line label={`Promo ${ride.promoCode}`} value={formatRupees(-ride.discountPaise)} />
+              )}
               {ride.tipPaise > 0 && (
                 <Line label={`Tip for ${pilotFirst}`} value={formatRupees(ride.tipPaise)} />
+              )}
+              {ride.cashbackPaise > 0 && ride.paymentMethod === "wallet" && (
+                <Line
+                  label={`Cashback ${ride.promoCode} · to wallet`}
+                  value={formatRupees(ride.cashbackPaise)}
+                />
               )}
             </>
           ) : (

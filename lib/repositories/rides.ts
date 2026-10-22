@@ -15,6 +15,7 @@ const active = { in: [...ACTIVE_STATUSES] as RideStatus[] };
 
 export const rideWithPilot = {
   rider: { select: { displayName: true, cometId: true } },
+  promo: { select: { code: true } },
   pilot: {
     select: {
       id: true,

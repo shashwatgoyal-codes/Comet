@@ -91,6 +91,29 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
   },
   {
+    id: "promos",
+    title: "Promos",
+    sub: "Codes, cashback, why a code won't apply",
+    questions: [
+      {
+        q: "How do I use a promo code?",
+        a: 'On Choose ride, open "Offers & promo codes" and apply one from the list or type a code. The prices update straight away, and the code is checked again when you book.',
+      },
+      {
+        q: "Why won't my code apply?",
+        a: "Each code has rules: some need a minimum fare, work on one ride type, or only with Comet Wallet, and most can be used once. The offer list tells you which rule a code doesn't meet.",
+      },
+      {
+        q: "When does cashback arrive?",
+        a: "Cashback codes like WALLET10 credit your Comet Wallet as soon as a wallet-paid trip is paid. If you switch to another way to pay, the cashback doesn't apply.",
+      },
+      {
+        q: "Does a promo cut my Pilot's pay?",
+        a: "No. Comet pays for every discount; your Pilot earns the full fare.",
+      },
+    ],
+  },
+  {
     id: "lost",
     title: "Lost items",
     sub: "Something left in the car",

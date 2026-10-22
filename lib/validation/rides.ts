@@ -13,7 +13,10 @@ export const bookRideSchema = z.object({
   tier: z.enum(RIDE_TIERS),
   paymentMethod: z.enum(PAYMENT_METHODS),
   womenOnly: z.boolean().default(false),
+  promoCode: z.string().trim().max(20).nullable().default(null),
 });
+
+export const promoLookupSchema = z.object({ code: z.string().trim().min(1).max(20) });
 
 export const rideIdSchema = z.object({ rideId: z.uuid() });
 

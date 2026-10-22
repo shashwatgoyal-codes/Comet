@@ -76,6 +76,7 @@ model User {
   identityVerification IdentityVerification?
   savedPlaces          SavedPlace[]
   emergencyContacts    EmergencyContact[]
+  promoRedemptions     PromoRedemption[]
   ratingsGot           Rating[]              @relation("RatingRatee")
 
   @@index([isDemo, createdAt], map: "users_demo_created_idx")
@@ -301,6 +302,9 @@ model Ride {
   durationS            Int           @map("duration_s")
   farePaise            Int           @map("fare_paise")
   discountPaise        Int           @default(0) @map("discount_paise")
+  /// Wallet cashback earned from a promo, credited once the ride is paid by wallet.
+  cashbackPaise        Int           @default(0) @map("cashback_paise")
+  promoId              String?       @map("promo_id") @db.Uuid
   waitingFeePaise      Int           @default(0) @map("waiting_fee_paise")
   cancellationFeePaise Int           @default(0) @map("cancellation_fee_paise")
   totalPaise           Int           @map("total_paise")
@@ -329,12 +333,14 @@ model Ride {
   createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz
 
-  rider         User          @relation("RideRider", fields: [riderId], references: [id], onDelete: Restrict)
-  pilot         User?         @relation("RidePilot", fields: [pilotId], references: [id], onDelete: Restrict)
+  rider         User             @relation("RideRider", fields: [riderId], references: [id], onDelete: Restrict)
+  pilot         User?            @relation("RidePilot", fields: [pilotId], references: [id], onDelete: Restrict)
   offers        RideOffer[]
   events        RideEvent[]
   shareLinks    ShareLink[]
   sosAlerts     SosAlert[]
+  promo         PromoCode?       @relation(fields: [promoId], references: [id], onDelete: Restrict)
+  redemption    PromoRedemption?
   walletEntries WalletEntry[]
   payments      Payment[]
   ratings       Rating[]
@@ -396,6 +402,7 @@ enum WalletEntryKind {
   payout
   cash_change
   demo_grant
+  promo_subsidy
 
   @@map("wallet_entry_kind")
 }
@@ -637,4 +644,57 @@ model EmergencyContact {
 
   @@index([userId], map: "emergency_contacts_user_idx")
   @@map("emergency_contacts")
+}
+
+// ----------------------------------------------------------------- promos
+
+enum PromoKind {
+  flat
+  percent
+  cashback
+
+  @@map("promo_kind")
+}
+
+/// Promo codes (docs/DATABASE.md "Promotions"). value is paise for flat,
+/// basis points for percent and cashback. Comet funds every discount; the
+/// Pilot always earns the full fare.
+model PromoCode {
+  id               String    @id @default(uuid()) @db.Uuid
+  code             String    @unique @db.VarChar(20)
+  kind             PromoKind
+  value            Int
+  maxDiscountPaise Int?      @map("max_discount_paise")
+  minFarePaise     Int       @default(0) @map("min_fare_paise")
+  tier             RideTier?
+  walletOnly       Boolean   @default(false) @map("wallet_only")
+  title            String    @db.VarChar(120)
+  startsAt         DateTime  @map("starts_at") @db.Timestamptz
+  endsAt           DateTime  @map("ends_at") @db.Timestamptz
+  maxUsesPerUser   Int       @default(1) @map("max_uses_per_user")
+  isActive         Boolean   @default(true) @map("is_active")
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  rides       Ride[]
+  redemptions PromoRedemption[]
+
+  @@map("promo_codes")
+}
+
+/// One per ride that used a promo. A cancelled or expired ride gives the
+/// use back (it isn't counted).
+model PromoRedemption {
+  id            String   @id @default(uuid()) @db.Uuid
+  promoId       String   @map("promo_id") @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  rideId        String   @unique @map("ride_id") @db.Uuid
+  discountPaise Int      @map("discount_paise")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  promo PromoCode @relation(fields: [promoId], references: [id], onDelete: Restrict)
+  user  User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  ride  Ride      @relation(fields: [rideId], references: [id], onDelete: Restrict)
+
+  @@index([userId, promoId], map: "promo_redemptions_user_promo_idx")
+  @@map("promo_redemptions")
 }

@@ -15,11 +15,13 @@ import {
   bookRideSchema,
   cancelRideSchema,
   listRidesSchema,
+  promoLookupSchema,
   rateRideSchema,
   rideIdSchema,
 } from "@/lib/validation/rides";
 import { listRides } from "@/lib/services/history";
 import { rateRide } from "@/lib/services/ratings";
+import { lookUpCode } from "@/lib/services/promos";
 
 /** Rider actions (docs/API.md "Places and quotes", "Rides (rider)"). */
 
@@ -103,5 +105,15 @@ export async function listRidesAction(input: unknown) {
     const parsed = listRidesSchema.safeParse(input);
     if (!parsed.success) throw new AppError("VALIDATION", "That list isn't available.");
     return listRides(user.id, parsed.data.tab, parsed.data.cursor);
+  });
+}
+
+/** A typed promo code, with its rules for the choose screen to preview. */
+export async function lookUpPromoAction(input: unknown) {
+  return runAction("promo.lookup", async () => {
+    const user = await requireRider();
+    const parsed = promoLookupSchema.safeParse(input);
+    if (!parsed.success) throw new AppError("VALIDATION", "Enter a code first.");
+    return lookUpCode(user.id, parsed.data.code);
   });
 }
