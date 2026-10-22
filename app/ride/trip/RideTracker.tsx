@@ -1,9 +1,10 @@
 "use client";
 
-import { Check, Clock, Phone, Share2, ShieldAlert, ShieldCheck, Star } from "lucide-react";
+import { Check, Clock, Share2, ShieldAlert, ShieldCheck, Star } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 
+import { ChatButton, ChatPanel, useChat } from "@/components/chat/ChatPanel";
 import { LiveMap } from "@/components/map/LiveMap";
 import { DESKTOP_PANEL, SHEET_HANDLE } from "@/components/layout/panel";
 import { RatingForm } from "@/components/RatingForm";
@@ -49,6 +50,9 @@ export function RideTracker({
   const [pending, startTransition] = useTransition();
   const [confirming, setConfirming] = useState(false);
   const [sosOpen, setSosOpen] = useState(initialSos !== null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const chatAvailable = ["accepted", "arrived", "in_progress"].includes(ride.status);
+  const { chat, refresh: refreshChat } = useChat(ride.id, chatOpen, chatAvailable);
   // "Ask me first": after one offer wave with no woman Pilot, ask.
   const [askReady, setAskReady] = useState(false);
   const [askDismissed, setAskDismissed] = useState(false);
@@ -314,19 +318,27 @@ export function RideTracker({
               {pending ? "Cancelling…" : "Cancel ride"}
             </Button>
             {!waiting && (
-              <Button
-                variant="outline"
-                disabled
-                title="Calling arrives with chat"
-                className="h-[54px] rounded-lg px-5"
-              >
-                <Phone className="size-5" aria-hidden />
-                <span className="sr-only">Call Pilot</span>
-              </Button>
+              <ChatButton unread={chat?.unread ?? 0} onClick={() => setChatOpen(true)} />
             )}
           </div>
         )}
+        {ride.status === "in_progress" && (
+          <div className="flex flex-col">
+            <ChatButton unread={chat?.unread ?? 0} onClick={() => setChatOpen(true)} />
+          </div>
+        )}
       </section>
+      {chatOpen && (
+        <ChatPanel
+          rideId={ride.id}
+          chat={chat}
+          side="rider"
+          title={`${ride.pilot?.name.split(" ")[0] ?? "Your Pilot"} · your Pilot`}
+          subtitle={ride.pilot?.plate ?? ""}
+          onSent={refreshChat}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
       {sosOpen && (
         <SosFlow
           rideId={ride.id}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useRef, useState, useTransition } from "react";
 
 import { DESKTOP_PANEL, SHEET_HANDLE } from "@/components/layout/panel";
+import { ChatButton, ChatPanel, useChat } from "@/components/chat/ChatPanel";
 import { LiveMap } from "@/components/map/LiveMap";
 import { SosFlow } from "@/components/safety/SosFlow";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,12 @@ export function PilotTrip({
   const codeRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [sosOpen, setSosOpen] = useState(initialSos !== null);
+  const [chatOpen, setChatOpen] = useState(false);
+  const { chat, refresh: refreshChat } = useChat(
+    ride.id,
+    chatOpen,
+    ["accepted", "arrived", "in_progress"].includes(ride.status),
+  );
   const [pending, startTransition] = useTransition();
   const [now, setNow] = useState(() => Date.now());
   const ended = ["completed", "cancelled", "no_show", "expired"].includes(ride.status);
@@ -281,12 +288,26 @@ export function PilotTrip({
           </>
         )}
 
+        <ChatButton unread={chat?.unread ?? 0} onClick={() => setChatOpen(true)} />
         {error && (
           <p role="alert" className="text-sm font-semibold text-danger-text">
             {error}
           </p>
         )}
       </section>
+      {chatOpen && (
+        <ChatPanel
+          rideId={ride.id}
+          chat={chat}
+          side="pilot"
+          title={`${ride.rider?.firstName ?? "Rider"} · rider`}
+          subtitle={
+            ride.status === "in_progress" ? ride.drop.address : `Pickup · ${ride.pickup.address}`
+          }
+          onSent={refreshChat}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
     </div>
   );
 }

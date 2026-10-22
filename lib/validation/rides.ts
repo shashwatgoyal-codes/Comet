@@ -64,3 +64,9 @@ export const startTripSchema = z.object({
     .trim()
     .regex(/^\d{4}$/),
 });
+
+export const sendMessageSchema = z.object({
+  rideId: z.uuid(),
+  body: z.string().trim().min(1).max(500),
+  isQuickReply: z.boolean().default(false),
+});

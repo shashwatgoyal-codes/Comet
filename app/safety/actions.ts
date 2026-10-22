@@ -5,7 +5,10 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { AppError } from "@/lib/errors";
 import { createShareLink } from "@/lib/services/share";
 import { endSos, raiseSos, setSafetyPin } from "@/lib/services/sos";
-import { rideIdSchema } from "@/lib/validation/rides";
+import { z } from "zod";
+
+import { getChat, sendMessage } from "@/lib/services/chat";
+import { rideIdSchema, sendMessageSchema } from "@/lib/validation/rides";
 import {
   endSosSchema,
   raiseSosSchema,
@@ -106,5 +109,25 @@ export async function relaxWomenOnlyAction(input: unknown) {
     if (!parsed.success) throw new AppError("NOT_FOUND", "That ride doesn't exist.");
     await relaxWomenOnly(userId, parsed.data.rideId);
     return { relaxed: true };
+  });
+}
+
+/** The ride's chat. markRead when it's on screen. */
+export async function getChatAction(input: unknown) {
+  return runAction("chat.get", async () => {
+    const userId = await requireUserId();
+    const parsed = rideIdSchema.extend({ markRead: z.boolean().default(false) }).safeParse(input);
+    if (!parsed.success) throw new AppError("NOT_FOUND", "That ride doesn't exist.");
+    return getChat(userId, parsed.data.rideId, parsed.data.markRead);
+  });
+}
+
+export async function sendMessageAction(input: unknown) {
+  return runAction("chat.send", async () => {
+    const userId = await requireUserId();
+    const parsed = sendMessageSchema.safeParse(input);
+    if (!parsed.success) throw new AppError("VALIDATION", "Messages are 1 to 500 characters.");
+    await sendMessage(userId, parsed.data.rideId, parsed.data.body, parsed.data.isQuickReply);
+    return { sent: true };
   });
 }

@@ -27,6 +27,7 @@ import { findSimulatedPilotFor, wantsSimulatedPilot } from "@/lib/repositories/u
 import { refreshRequestedRide } from "@/lib/services/matching";
 import { settleRide } from "@/lib/repositories/wallet";
 import { DEMO_PERSONAS, ensureSimulatedPilot } from "@/lib/services/accounts";
+import { answerAsBot } from "@/lib/services/chat";
 import { simulateIdentityVerification } from "@/lib/services/women-only";
 import { chargeOnCompletion } from "@/lib/services/payments";
 import { toRideView, type RideView } from "@/lib/services/rides";
@@ -140,6 +141,9 @@ export async function tickDemoRide(
     ) {
       await settleRide(ride.id, "cash");
     }
+
+    // The bot answers chat like a polite Pilot.
+    await answerAsBot(ride.id, botId, now);
 
     const { point, headingDeg } = simPosition(
       step,

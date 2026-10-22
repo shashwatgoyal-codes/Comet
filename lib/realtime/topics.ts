@@ -20,5 +20,6 @@ export const EVENTS = {
   offerGone: "offer.gone",
   walletUpdated: "wallet.updated",
   sosRaised: "sos.raised",
+  chatMessage: "chat.message",
   sosUpdated: "sos.updated",
 } as const;

@@ -77,6 +77,7 @@ model User {
   savedPlaces          SavedPlace[]
   emergencyContacts    EmergencyContact[]
   promoRedemptions     PromoRedemption[]
+  chatMessages         ChatMessage[]
   ratingsGot           Rating[]              @relation("RatingRatee")
 
   @@index([isDemo, createdAt], map: "users_demo_created_idx")
@@ -345,6 +346,7 @@ model Ride {
   sosAlerts     SosAlert[]
   promo         PromoCode?       @relation(fields: [promoId], references: [id], onDelete: Restrict)
   redemption    PromoRedemption?
+  chatMessages  ChatMessage[]
   walletEntries WalletEntry[]
   payments      Payment[]
   ratings       Rating[]
@@ -701,4 +703,32 @@ model PromoRedemption {
 
   @@index([userId, promoId], map: "promo_redemptions_user_promo_idx")
   @@map("promo_redemptions")
+}
+
+// ------------------------------------------------------------------- chat
+
+enum ChatRole {
+  rider
+  pilot
+
+  @@map("chat_role")
+}
+
+/// Rider–Pilot messages on one ride (docs/PRD.md F8). Only the ride's two
+/// participants read or write them; never shown on the share page.
+model ChatMessage {
+  id           String    @id @default(uuid()) @db.Uuid
+  rideId       String    @map("ride_id") @db.Uuid
+  senderId     String    @map("sender_id") @db.Uuid
+  senderRole   ChatRole  @map("sender_role")
+  body         String    @db.VarChar(500)
+  isQuickReply Boolean   @default(false) @map("is_quick_reply")
+  readAt       DateTime? @map("read_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  ride   Ride @relation(fields: [rideId], references: [id], onDelete: Restrict)
+  sender User @relation(fields: [senderId], references: [id], onDelete: Restrict)
+
+  @@index([rideId, createdAt], map: "chat_messages_ride_created_idx")
+  @@map("chat_messages")
 }
