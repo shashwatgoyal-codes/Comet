@@ -74,6 +74,8 @@ model User {
   shareLinks           ShareLink[]
   sosRaised            SosAlert[]            @relation("SosRaisedBy")
   identityVerification IdentityVerification?
+  savedPlaces          SavedPlace[]
+  emergencyContacts    EmergencyContact[]
   ratingsGot           Rating[]              @relation("RatingRatee")
 
   @@index([isDemo, createdAt], map: "users_demo_created_idx")
@@ -591,4 +593,48 @@ model IdentityVerification {
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@map("identity_verifications")
+}
+
+// --------------------------------------------------------------- account
+
+enum PlaceLabel {
+  home
+  work
+  other
+
+  @@map("place_label")
+}
+
+/// "14 · Saved places". At most one Home and one Work per user (partial
+/// unique indexes in the migration); deleted with the user.
+model SavedPlace {
+  id        String     @id @default(uuid()) @db.Uuid
+  userId    String     @map("user_id") @db.Uuid
+  label     PlaceLabel
+  name      String     @db.VarChar(60)
+  address   String     @db.VarChar(200)
+  lat       Float
+  lng       Float
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt], map: "saved_places_user_idx")
+  @@map("saved_places")
+}
+
+/// Emergency contacts (docs/DATABASE.md). Comet never calls or messages
+/// them — SOS contacts no real person (docs/PRD.md §7). Only the owner
+/// reads them; never shown to Pilots, riders or the share page.
+model EmergencyContact {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String   @db.VarChar(60)
+  phoneE164 String   @map("phone_e164") @db.VarChar(16)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "emergency_contacts_user_idx")
+  @@map("emergency_contacts")
 }

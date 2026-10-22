@@ -15,13 +15,15 @@ export type PositionState =
  * India — Comet only operates in Bengaluru, and a visitor in another
  * country should still see a working demo there.
  */
-export function useCurrentPosition(): PositionState {
+export function useCurrentPosition(enabled = true): PositionState {
   const [state, setState] = useState<PositionState>({
     status: "locating",
     position: DEFAULT_CENTER,
   });
 
   useEffect(() => {
+    // Not asked yet: a screen explaining why comes first ("15 · Permissions").
+    if (!enabled) return;
     if (!("geolocation" in navigator)) {
       // Deferred like the callbacks below, so the effect body never sets
       // state synchronously.
@@ -47,7 +49,7 @@ export function useCurrentPosition(): PositionState {
         }),
       { enableHighAccuracy: true, timeout: 8_000, maximumAge: 60_000 },
     );
-  }, []);
+  }, [enabled]);
 
   return state;
 }

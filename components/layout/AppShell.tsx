@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { CometLogo } from "@/components/icons/CometMark";
+import { OfflineBanner } from "@/components/OfflineBanner";
 import { cn } from "@/lib/utils";
 
 /**
@@ -48,6 +49,7 @@ export function AppShell({
   const pilot = app === "pilot";
   return (
     <div className="min-h-dvh bg-background">
+      <OfflineBanner />
       <header
         className={cn(
           "hidden h-16 items-center gap-6 border-b px-6 md:flex",

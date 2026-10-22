@@ -19,6 +19,7 @@ import {
   setDemoSafetyPin,
 } from "@/lib/repositories/users";
 import { grantDemoWallet } from "@/lib/services/wallet";
+import { seedDemoPlaces } from "@/lib/services/places";
 import { hashPin } from "@/lib/services/sos";
 import { DEMO_SAFETY_PIN } from "@/lib/safety";
 
@@ -142,6 +143,7 @@ export async function setUpDemo(
     await ensureRiderProfile(user.id, { simulatedPilot: options.simulatedPilot ?? true });
     await ensureSimulatedPilot(user.id, random);
     await grantDemoWallet(user.id);
+    await seedDemoPlaces(user.id);
   } else {
     await ensureApprovedDemoPilot(user.id, DEMO_VEHICLE);
   }

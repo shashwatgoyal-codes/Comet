@@ -22,6 +22,12 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${port}`,
     trace: "retain-on-failure",
+    // Location granted at HSR Layout (the app's own fallback), so the
+    // first-launch location screen doesn't cover pages under test. Tests
+    // that need another spot make their own context; the location screen
+    // itself is tested in a context with no permission.
+    permissions: ["geolocation"],
+    geolocation: { latitude: 12.9116, longitude: 77.6474 },
   },
   projects: [
     { name: "mobile", use: { ...devices["Pixel 7"] } },

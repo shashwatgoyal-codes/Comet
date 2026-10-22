@@ -21,7 +21,8 @@ test("rider plans a trip from current location and sees four prices", async ({ p
 
   await page.getByRole("link", { name: "Where to?" }).click();
   await expect(page).toHaveURL(/\/ride\/plan$/);
-  await expect(page.getByText("Current location")).toBeVisible();
+  // The pickup field starts from your location; you can type over it.
+  await expect(page.getByLabel("Pickup")).toHaveAttribute("placeholder", "Current location");
 
   await page.getByLabel("Destination").fill("air");
   await expect(page.getByText("Type at least 3 letters to search.")).not.toBeVisible();

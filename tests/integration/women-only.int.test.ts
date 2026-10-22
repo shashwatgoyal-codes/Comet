@@ -22,9 +22,10 @@ import {
 const HSR: LatLng = { lat: 12.9116, lng: 77.6474 };
 const KORAMANGALA: LatLng = { lat: 12.9352, lng: 77.6245 };
 const anon = () => ({ id: randomUUID(), email: null, isAnonymous: true });
-// 2 pm and 11 pm in India.
-const DAY = new Date("2026-10-16T08:30:00Z");
-const NIGHT = new Date("2026-10-16T17:30:00Z");
+// 2 pm and 11 pm in India, today.
+const today = new Date().toISOString().slice(0, 10);
+const DAY = new Date(`${today}T08:30:00Z`);
+const NIGHT = new Date(`${today}T17:30:00Z`);
 
 beforeAll(() => {
   process.env.COMET_FAKE_EXTERNALS = "1";
@@ -67,7 +68,9 @@ async function book(riderId: string, opts: { womenOnly?: boolean; now?: Date } =
   ).rideId;
 }
 
-const offeredTo = async (pilotId: string) => (await listOpenOffers(pilotId)).map((o) => o.rideId);
+/** Offers open for this Pilot, as seen at the same moment the ride was booked. */
+const offeredTo = async (pilotId: string, now = new Date()) =>
+  (await listOpenOffers(pilotId, now)).map((o) => o.rideId);
 
 describe("women Pilots only", () => {
   it("needs a verified rider", async () => {
@@ -145,12 +148,12 @@ describe("women passengers only", () => {
     const woman = await pilot({ woman: true });
     await setWomenPassengersMode(woman, "night");
     const byDay = await book(await rider(), { now: DAY });
-    expect(await offeredTo(woman)).toContain(byDay);
+    expect(await offeredTo(woman, DAY)).toContain(byDay);
 
     await clearTheRoads();
     const nightPilot = await pilot({ woman: true });
     await setWomenPassengersMode(nightPilot, "night");
     const atNight = await book(await rider(), { now: NIGHT });
-    expect(await offeredTo(nightPilot)).not.toContain(atNight);
+    expect(await offeredTo(nightPilot, NIGHT)).not.toContain(atNight);
   });
 });
