@@ -59,7 +59,7 @@ export function PilotQueue({ initial }: { initial: Queue }) {
   return (
     <section
       aria-labelledby="queue-h"
-      className="flex flex-col rounded-xl border border-border bg-card"
+      className="flex min-h-0 flex-1 flex-col rounded-xl border border-border bg-card"
     >
       <div className="flex items-center justify-between border-b border-border px-[18px] py-3.5">
         <h2 id="queue-h" className="font-heading text-[17px] font-bold">
@@ -85,53 +85,58 @@ export function PilotQueue({ initial }: { initial: Queue }) {
         </p>
       )}
 
-      <ul>
+      <ul className="min-h-0 flex-1 overflow-y-auto">
         {queue.pending.map((p) => (
           <li
             key={p.pilotId}
             aria-label={`Application from ${p.name}`}
             className="flex flex-col gap-3 border-b border-border px-[18px] py-3"
           >
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-start gap-3">
               <span className="flex size-[38px] shrink-0 items-center justify-center rounded-full bg-muted text-[13px] font-bold">
                 {initialsOf(p.name)}
               </span>
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="text-sm font-semibold">
-                  {p.name} · {p.vehicle} · <span className="font-normal">{p.cometId}</span>
+                  {p.name} · {p.vehicle}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {p.plate} · {p.vehicleDetail} · {p.licence} · UPI {p.payout} · sent{" "}
-                  {submittedAgo(p.submittedAt)}
+                  {p.cometId} · sent {submittedAgo(p.submittedAt)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {p.plate} · {p.vehicleDetail}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {p.licence} · UPI {p.payout}
                 </span>
               </span>
-              {rejecting !== p.pilotId && (
-                <span className="flex gap-1.5">
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => {
-                      setRejecting(p.pilotId);
-                      setReason("");
-                      setError(null);
-                    }}
-                    aria-label={`Reject ${p.name}`}
-                    className="h-[34px] rounded-sm border border-border bg-card px-2.5 text-[13px] font-bold text-danger-text"
-                  >
-                    Reject
-                  </button>
-                  <button
-                    type="button"
-                    disabled={pending}
-                    onClick={() => run(() => approvePilotAction({ pilotId: p.pilotId }))}
-                    aria-label={`Approve ${p.name}`}
-                    className="h-[34px] rounded-sm bg-ink px-2.5 text-[13px] font-bold text-on-ink"
-                  >
-                    Approve
-                  </button>
-                </span>
-              )}
             </div>
+            {rejecting !== p.pilotId && (
+              <span className="flex justify-end gap-1.5">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => {
+                    setRejecting(p.pilotId);
+                    setReason("");
+                    setError(null);
+                  }}
+                  aria-label={`Reject ${p.name}`}
+                  className="h-[34px] rounded-sm border border-border bg-card px-2.5 text-[13px] font-bold text-danger-text"
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => run(() => approvePilotAction({ pilotId: p.pilotId }))}
+                  aria-label={`Approve ${p.name}`}
+                  className="h-[34px] rounded-sm bg-ink px-2.5 text-[13px] font-bold text-on-ink"
+                >
+                  Approve
+                </button>
+              </span>
+            )}
             {rejecting === p.pilotId && (
               <form
                 className="flex flex-col gap-2"

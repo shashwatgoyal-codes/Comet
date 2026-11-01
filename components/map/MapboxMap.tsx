@@ -8,7 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 import { FallbackMap } from "./FallbackMap";
-import type { MapViewProps } from "./types";
+import type { FleetMarker, MapViewProps } from "./types";
 
 /**
  * The real map. Loaded only on map screens (LiveMap imports it lazily),
@@ -23,6 +23,18 @@ const STYLE = {
   light: "mapbox://styles/mapbox/light-v11",
   dark: "mapbox://styles/mapbox/dark-v11",
 };
+
+function fleetEl(kind: FleetMarker["kind"]) {
+  const el = document.createElement("div");
+  el.setAttribute("aria-hidden", "true");
+  el.className =
+    kind === "sos"
+      ? "size-4 rounded-full border-[3px] border-white bg-danger-text shadow-float ring-8 ring-danger-text/25"
+      : kind === "trip"
+        ? "size-3 rounded-[3px] border-2 border-white bg-primary"
+        : "size-3 rounded-[3px] border-2 border-ink bg-white";
+  return el;
+}
 
 function markerEl(kind: "you" | "pickup" | "drop" | "car") {
   const el = document.createElement("div");
@@ -45,6 +57,7 @@ export default function MapboxMap(props: MapViewProps) {
     pickup,
     drop,
     car,
+    fleet,
     route,
     bottomInset = 0,
     leftInset = 0,
@@ -54,6 +67,8 @@ export default function MapboxMap(props: MapViewProps) {
   const map = useRef<mapboxgl.Map | null>(null);
   const markers = useRef<mapboxgl.Marker[]>([]);
   const carMarker = useRef<mapboxgl.Marker | null>(null);
+  const fleetMarkers = useRef<mapboxgl.Marker[]>([]);
+  const fleetFitted = useRef(false);
   const [failed, setFailed] = useState(false);
   const [ready, setReady] = useState(false);
 
@@ -188,6 +203,27 @@ export default function MapboxMap(props: MapViewProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, car?.lat, car?.lng]);
+
+  // The ops fleet: redrawn on each update, fitted to the city once.
+  useEffect(() => {
+    const m = map.current;
+    if (!m || !ready || !fleet) return;
+    fleetMarkers.current.forEach((mk) => mk.remove());
+    fleetMarkers.current = fleet.map((f) =>
+      new mapboxgl.Marker({ element: fleetEl(f.kind) })
+        .setLngLat([f.point.lng, f.point.lat])
+        .addTo(m),
+    );
+    if (!fleetFitted.current && fleet.length > 1) {
+      fleetFitted.current = true;
+      const first: [number, number] = [fleet[0]!.point.lng, fleet[0]!.point.lat];
+      const bounds = fleet.reduce(
+        (b, f) => b.extend([f.point.lng, f.point.lat]),
+        new mapboxgl.LngLatBounds(first, first),
+      );
+      m.fitBounds(bounds, { padding: 60, duration: 0, maxZoom: 14 });
+    }
+  }, [ready, fleet]);
 
   if (failed) return <FallbackMap {...props} />;
   return (

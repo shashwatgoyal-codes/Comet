@@ -91,6 +91,13 @@ export async function raiseSos(
   return view(alert);
 }
 
+/** One of the user's own alerts, to follow whether ops have it. */
+export async function getSos(userId: string, alertId: string): Promise<SosView> {
+  const alert = await db.sosAlert.findFirst({ where: { id: alertId, raisedBy: userId } });
+  if (!alert) throw new AppError("NOT_FOUND", "That alert doesn't exist.");
+  return view(alert);
+}
+
 /** The user's live SOS on this ride, so a reload goes straight back to it. */
 export async function getOpenSos(userId: string, rideId: string): Promise<SosView | null> {
   const alert = await db.sosAlert.findFirst({

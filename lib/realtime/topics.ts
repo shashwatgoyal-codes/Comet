@@ -9,7 +9,10 @@ export const topics = {
   ride: (rideId: string) => `ride:${rideId}`,
   pilot: (pilotId: string) => `pilot:${pilotId}`,
   rider: (riderId: string) => `rider:${riderId}`,
-  /** Ops dashboard alerts. Nobody can listen until the dashboard (phase 10) adds a policy. */
+  /**
+   * Ops alerts. Nobody can listen: the ops role is an env allowlist the
+   * database can't check, so the dashboard polls instead (docs/PRD.md F10).
+   */
   ops: "ops",
 } as const;
 

@@ -1,5 +1,5 @@
 import type { APIRequestContext, Page } from "@playwright/test";
-import { expect } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
 /**
  * Email sign-in for e2e tests. The code is read from Mailpit, the mail
@@ -43,3 +43,10 @@ export async function signInByEmail(
   await page.getByLabel("6-digit code").pressSequentially(await waitForCode(request, email));
   await expect(page).toHaveURL(lands);
 }
+
+/**
+ * This test's own ops address (playwright.config.ts allowlists each one):
+ * parallel sign-ins to one address race for the emailed code.
+ */
+export const opsEmail = (t: "approve" | "reject" | "sos" | "promo") =>
+  `e2e-ops-${t}-${test.info().project.name}@comet.test`;

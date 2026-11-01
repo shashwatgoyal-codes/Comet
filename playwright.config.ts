@@ -48,7 +48,7 @@ export default defineConfig({
       NEXT_PUBLIC_MAPBOX_TOKEN: "",
       // One ops address per test and project: parallel sign-ins to the same
       // address race for the emailed code.
-      OPS_ADMIN_EMAILS: ["approve", "reject"]
+      OPS_ADMIN_EMAILS: ["approve", "reject", "sos", "promo"]
         .flatMap((t) => ["mobile", "desktop"].map((p) => `e2e-ops-${t}-${p}@comet.test`))
         .join(","),
     },

@@ -10,6 +10,11 @@ export type MapViewProps = {
   drop?: LatLng;
   /** The Pilot's car, moving live during a trip. */
   car?: LatLng;
+  /**
+   * Many vehicles at once (the ops city view): idle Pilots, trips in
+   * progress and SOS alerts. Fitted on first show, not on every update.
+   */
+  fleet?: FleetMarker[];
   /** [lng, lat] pairs, GeoJSON order. */
   route?: [number, number][];
   /**
@@ -24,5 +29,7 @@ export type MapViewProps = {
   leftInset?: number;
   className?: string;
 };
+
+export type FleetMarker = { id: string; point: LatLng; kind: "pilot" | "trip" | "sos" };
 
 export { DEFAULT_CENTER } from "@/lib/geo";

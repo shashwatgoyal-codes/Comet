@@ -12,10 +12,12 @@ import {
   SOS_COUNTDOWN_S,
   type SosReasonId,
 } from "@/lib/safety";
+import { topics } from "@/lib/realtime/topics";
+import { useLive } from "@/lib/realtime/use-live";
 import type { SosView } from "@/lib/services/sos";
 import { cn } from "@/lib/utils";
 
-import { endSosAction, raiseSosAction } from "@/app/safety/actions";
+import { endSosAction, getSosAction, raiseSosAction } from "@/app/safety/actions";
 
 /**
  * "6d · SOS emergency" (rider) and "5d · Pilot SOS" on the canvas.
@@ -103,6 +105,16 @@ export function SosFlow({
       stopped.current = true;
     };
   }, [initialAlert]);
+
+  // Follow the alert while it's open: ops assigning or closing it.
+  useLive(
+    alert && alert.status !== "resolved" ? topics.ride(rideId) : null,
+    () => {
+      if (!alert) return;
+      getSosAction({ alertId: alert.id }).then((r) => r.ok && setAlert(r.data));
+    },
+    5_000,
+  );
 
   async function end() {
     if (!alert) return;
@@ -298,7 +310,11 @@ export function SosFlow({
 
   // --------------------------------------------------------------- active
   const steps = [
-    { title: "Comet safety team alerted", sub: "Your alert is on the safety dashboard" },
+    alert.status === "resolved"
+      ? { title: "Closed by Comet's safety team", sub: "You can end SOS with your PIN" }
+      : alert.status === "acknowledged"
+        ? { title: "A safety agent has your alert", sub: "They're following your trip now" }
+        : { title: "Comet safety team alerted", sub: "Your alert is on the safety dashboard" },
     { title: "Trip details logged", sub: details },
     {
       title: "Live location shared with Comet",

@@ -265,7 +265,7 @@ export async function listPilotApplications(now = new Date()): Promise<{
         updatedAt: { gte: new Date(now.getTime() - 7 * 86_400_000) },
       },
       orderBy: { updatedAt: "desc" },
-      take: 10,
+      take: 5,
       include,
     }),
   ]);

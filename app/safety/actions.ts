@@ -4,7 +4,8 @@ import { runAction } from "@/lib/actions";
 import { getCurrentUser } from "@/lib/auth/session";
 import { AppError } from "@/lib/errors";
 import { createShareLink } from "@/lib/services/share";
-import { endSos, raiseSos, setSafetyPin } from "@/lib/services/sos";
+import { endSos, getSos, raiseSos, setSafetyPin } from "@/lib/services/sos";
+import { alertIdSchema } from "@/lib/validation/ops";
 import { z } from "zod";
 
 import { getChat, sendMessage } from "@/lib/services/chat";
@@ -41,6 +42,15 @@ export async function raiseSosAction(input: unknown) {
       reason: parsed.data.reason,
       point: parsed.data.point,
     });
+  });
+}
+
+export async function getSosAction(input: unknown) {
+  return runAction("sos.get", async () => {
+    const userId = await requireUserId();
+    const parsed = alertIdSchema.safeParse(input);
+    if (!parsed.success) throw new AppError("NOT_FOUND", "That alert doesn't exist.");
+    return getSos(userId, parsed.data.alertId);
   });
 }
 

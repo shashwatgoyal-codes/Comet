@@ -24,6 +24,7 @@ export function FallbackMap({
   pickup,
   drop,
   car,
+  fleet,
   route,
   bottomInset = 0,
   leftInset = 0,
@@ -51,6 +52,7 @@ export function FallbackMap({
     ...[you, pickup, drop, car, center]
       .filter(Boolean)
       .map((p) => [p!.lng, p!.lat] as [number, number]),
+    ...(fleet ?? []).map((f) => [f.point.lng, f.point.lat] as [number, number]),
   ];
 
   // Fit everything into the part of the map above the sheet.
@@ -182,6 +184,35 @@ export function FallbackMap({
             strokeWidth="5"
           />
         )}
+        {fleet?.map((f) => {
+          const [x, y] = project([f.point.lng, f.point.lat]);
+          return (
+            <g key={f.id} transform={`translate(${x} ${y})`} data-testid={`fleet-${f.kind}`}>
+              {f.kind === "sos" ? (
+                <>
+                  <circle
+                    r="18"
+                    fill="var(--danger-text)"
+                    opacity="0.25"
+                    className="motion-safe:animate-pulse"
+                  />
+                  <circle r="8" fill="var(--danger-text)" stroke="#fff" strokeWidth="3" />
+                </>
+              ) : (
+                <rect
+                  x="-6"
+                  y="-6"
+                  width="12"
+                  height="12"
+                  rx="3"
+                  fill={f.kind === "trip" ? "var(--primary)" : "#fff"}
+                  stroke={f.kind === "trip" ? "#fff" : "var(--ink)"}
+                  strokeWidth="2.5"
+                />
+              )}
+            </g>
+          );
+        })}
         {carXY && (
           <g transform={`translate(${carXY[0]} ${carXY[1]})`} data-testid="car-marker">
             <circle r="22" fill="var(--primary)" opacity="0.22" />

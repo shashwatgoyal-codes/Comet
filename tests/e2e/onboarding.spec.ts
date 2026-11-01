@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { signInByEmail } from "./mail";
+import { opsEmail, signInByEmail } from "./mail";
 
 /**
  * Pilot onboarding and approval (docs/UX_FLOWS.md Flows 12 and 13): a new
@@ -8,9 +8,6 @@ import { signInByEmail } from "./mail";
  */
 
 const inAYear = new Date(Date.now() + 365 * 86_400_000).toISOString().slice(0, 10);
-
-/** This test's own ops address (playwright.config.ts allowlists it). */
-const opsEmail = (t: "approve" | "reject") => `e2e-ops-${t}-${test.info().project.name}@comet.test`;
 
 /** A name no other run has used, so the ops queue row is this run's. Letters only. */
 const uniqueName = (first: string) => {
