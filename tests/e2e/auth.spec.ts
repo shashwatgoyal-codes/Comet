@@ -1,5 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { waitForCode } from "./mail";
+
 /**
  * Phase 2 critical flows: one-click demo for both roles, email-code
  * sign-in, sign-out, and the redirect that protects app pages.
@@ -8,7 +10,6 @@ import { expect, test, type Page } from "@playwright/test";
  * Mailpit, the mail catcher that local Supabase runs on :54324.
  */
 
-const MAILPIT = process.env.MAILPIT_URL ?? "http://127.0.0.1:54324";
 const COMET_ID = /^CMT-[0-9A-HJKMNP-TV-Z]{6}$/;
 
 async function cometIdOnPage(page: Page) {
@@ -104,23 +105,3 @@ test("a wrong email code is rejected with a clear message", async ({ page, reque
   await page.getByLabel("6-digit code").pressSequentially("000000");
   await expect(page.getByText(/didn't match/)).toBeVisible();
 });
-
-async function waitForCode(request: import("@playwright/test").APIRequestContext, email: string) {
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const res = await request.get(
-      `${MAILPIT}/api/v1/search?query=${encodeURIComponent(`to:"${email}"`)}`,
-    );
-    const body = (await res.json()) as { messages?: { ID: string }[] };
-    const id = body.messages?.[0]?.ID;
-    if (id) {
-      const msg = (await (await request.get(`${MAILPIT}/api/v1/message/${id}`)).json()) as {
-        Text?: string;
-        HTML?: string;
-      };
-      const match = `${msg.Text ?? ""} ${msg.HTML ?? ""}`.match(/\b(\d{6})\b/);
-      if (match) return match[1]!;
-    }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  throw new Error(`No sign-in code arrived for ${email}`);
-}

@@ -11,14 +11,17 @@ import { hasSafetyPin } from "@/lib/services/sos";
 import { requireUser } from "@/lib/auth/session";
 import { TIER_RATES, type RideTier } from "@/lib/fares";
 import { findPilotProfile } from "@/lib/repositories/pilots";
+import { getPilotDocuments } from "@/lib/services/onboarding";
+import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Pilot account" };
 
-/** "9 · Pilot account": Comet ID and vehicle. Documents arrive with onboarding. */
+/** "9 · Pilot account": Comet ID, vehicle and documents with expiry warnings. */
 export default async function PilotAccountPage() {
   const user = await requireUser("/pilot/account");
   const pilot = await findPilotProfile(user.id);
   if (!pilot) redirect("/pilot");
+  const documents = await getPilotDocuments(user.id);
 
   return (
     <AppShell app="pilot" active="/pilot/account" layout="page" initial={user.displayName[0]}>
@@ -54,6 +57,34 @@ export default async function PilotAccountPage() {
             {pilot.plate}
           </span>
         </section>
+        {documents.length > 0 && (
+          <section
+            aria-labelledby="docs-h"
+            className="flex flex-col gap-2.5 rounded-lg bg-card p-4"
+          >
+            <h2
+              id="docs-h"
+              className="text-xs font-bold tracking-widest text-muted-foreground uppercase"
+            >
+              Documents
+            </h2>
+            <ul className="flex flex-col gap-2.5">
+              {documents.map((d) => (
+                <li key={d.kind} className="flex items-center justify-between gap-2 text-sm">
+                  <span className="font-semibold">{d.name}</span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-xs font-bold whitespace-nowrap",
+                      d.warn ? "bg-warn-soft text-warn" : "bg-info-soft text-info",
+                    )}
+                  >
+                    {d.status}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </main>
     </AppShell>
   );

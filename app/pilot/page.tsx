@@ -17,7 +17,10 @@ export default async function PilotHomePage() {
   const user = await requireUser("/pilot");
   const pilot = await findPilotProfile(user.id);
 
-  if (!pilot) {
+  // Real accounts apply through onboarding until ops approve them.
+  if (!user.isDemo && pilot?.status !== "approved") redirect("/pilot/onboarding");
+
+  if (!pilot || pilot.status !== "approved") {
     return (
       <AppShell app="pilot" active="/pilot" layout="map" initial={user.displayName[0]}>
         <main className="flex min-h-app flex-col gap-6 px-5 pt-7 pb-8 md:mx-auto md:max-w-[640px]">
@@ -26,8 +29,8 @@ export default async function PilotHomePage() {
             You&apos;re not a Comet Pilot yet
           </h1>
           <p className="text-muted-foreground">
-            Pilot sign-up opens in a later build phase. Meanwhile you can try the Pilot side in the
-            demo.
+            This demo account rides as a passenger. To try the Pilot side, start the Pilot demo, or
+            sign in with your email to apply as a Pilot.
           </p>
           <Link href="/demo?role=pilot" className="font-semibold text-info hover:underline">
             Try the Pilot demo

@@ -43,6 +43,14 @@ export default defineConfig({
     timeout: 240_000,
     // Fake maps and payments, and no Mapbox token, so the drawn map is used and
     // routes are deterministic. An env var set here beats .env.local.
-    env: { COMET_FAKE_EXTERNALS: "1", NEXT_PUBLIC_MAPBOX_TOKEN: "" },
+    env: {
+      COMET_FAKE_EXTERNALS: "1",
+      NEXT_PUBLIC_MAPBOX_TOKEN: "",
+      // One ops address per test and project: parallel sign-ins to the same
+      // address race for the emailed code.
+      OPS_ADMIN_EMAILS: ["approve", "reject"]
+        .flatMap((t) => ["mobile", "desktop"].map((p) => `e2e-ops-${t}-${p}@comet.test`))
+        .join(","),
+    },
   },
 });

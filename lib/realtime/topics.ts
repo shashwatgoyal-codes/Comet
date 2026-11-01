@@ -22,4 +22,6 @@ export const EVENTS = {
   sosRaised: "sos.raised",
   chatMessage: "chat.message",
   sosUpdated: "sos.updated",
+  /** On pilot:{id} when ops approve or reject the application. */
+  pilotStatus: "pilot.status",
 } as const;

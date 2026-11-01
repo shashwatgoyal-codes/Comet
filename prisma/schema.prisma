@@ -195,11 +195,75 @@ model PilotProfile {
   /// The demo rider this bot serves; null for ambient bots and real Pilots.
   simulatedForUserId  String?       @map("simulated_for_user_id") @db.Uuid
   approvedAt          DateTime?     @map("approved_at") @db.Timestamptz
+  /// Onboarding (docs/PRD.md F11): the "Profile & photo" step.
+  profileCompletedAt  DateTime?     @map("profile_completed_at") @db.Timestamptz
+  /// Where simulated payouts go. Shown masked.
+  payoutUpiId         String?       @map("payout_upi_id") @db.VarChar(80)
+  /// Set when the Pilot sends the application for review; cleared on rejection.
+  submittedAt         DateTime?     @map("submitted_at") @db.Timestamptz
+  rejectionReason     String?       @map("rejection_reason") @db.VarChar(300)
   createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz
 
+  documents PilotDocument[]
+
   @@index([simulatedForUserId], map: "pilot_profiles_simulated_for_idx")
+  @@index([status, submittedAt], map: "pilot_profiles_review_queue_idx")
   @@map("pilot_profiles")
+}
+
+enum PilotDocumentKind {
+  driving_licence
+  rc
+  vehicle_photo
+  background_check
+
+  @@map("pilot_document_kind")
+}
+
+enum PilotDocumentStatus {
+  in_review
+  verified
+  rejected
+
+  @@map("pilot_document_status")
+}
+
+/// A Pilot's documents (docs/DATABASE.md "pilot_documents"). In Comet the
+/// upload is simulated: no file is stored, only what the Pilot typed (the
+/// last 4 characters of a licence number, an expiry date).
+model PilotDocument {
+  id              String              @id @default(uuid()) @db.Uuid
+  pilotId         String              @map("pilot_id") @db.Uuid
+  kind            PilotDocumentKind
+  status          PilotDocumentStatus @default(in_review)
+  referenceLast4  String?             @map("reference_last4") @db.VarChar(4)
+  expiresOn       DateTime?           @map("expires_on") @db.Date
+  /// Always null while uploads are simulated.
+  storagePath     String?             @map("storage_path")
+  reviewedBy      String?             @map("reviewed_by") @db.Uuid
+  reviewedAt      DateTime?           @map("reviewed_at") @db.Timestamptz
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  pilot PilotProfile @relation(fields: [pilotId], references: [userId], onDelete: Cascade)
+
+  @@unique([pilotId, kind], map: "pilot_documents_pilot_kind_key")
+  @@map("pilot_documents")
+}
+
+/// Every ops write (docs/SECURITY.md §3). Append-only.
+model OpsAuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String   @map("actor_id") @db.Uuid
+  action     String   @db.VarChar(40)
+  targetType String   @map("target_type") @db.VarChar(30)
+  targetId   String?  @map("target_id") @db.Uuid
+  data       Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([createdAt(sort: Desc)], map: "ops_audit_log_created_idx")
+  @@map("ops_audit_log")
 }
 
 // ------------------------------------------------------------ live Pilots

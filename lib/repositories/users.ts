@@ -78,12 +78,37 @@ export type DemoVehicle = {
   seats: number;
 };
 
-/** The demo Pilot is approved straight away so the visitor can go online. */
-export async function ensureApprovedDemoPilot(userId: string, vehicle: DemoVehicle): Promise<void> {
+/**
+ * The demo Pilot is approved straight away so the visitor can go online,
+ * with verified documents; the licence is close to expiry so the account
+ * page shows its warning.
+ */
+export async function ensureApprovedDemoPilot(
+  userId: string,
+  vehicle: DemoVehicle,
+  now = new Date(),
+): Promise<void> {
   await db.pilotProfile.upsert({
     where: { userId },
-    create: { userId, status: "approved", approvedAt: new Date(), ...vehicle },
+    create: {
+      userId,
+      status: "approved",
+      approvedAt: now,
+      profileCompletedAt: now,
+      payoutUpiId: "rohan.kumar@okaxis",
+      ...vehicle,
+    },
     update: {},
+  });
+  const licenceExpiry = new Date(now.getTime() + 23 * 86_400_000);
+  await db.pilotDocument.createMany({
+    data: [
+      { kind: "driving_licence" as const, referenceLast4: "4471", expiresOn: licenceExpiry },
+      { kind: "rc" as const, referenceLast4: "2841" },
+      { kind: "vehicle_photo" as const },
+      { kind: "background_check" as const },
+    ].map((d) => ({ pilotId: userId, status: "verified" as const, reviewedAt: now, ...d })),
+    skipDuplicates: true,
   });
 }
 
