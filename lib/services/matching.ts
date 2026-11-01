@@ -6,7 +6,8 @@ import type { RideTier } from "@/lib/fares";
 import { log } from "@/lib/log";
 import { broadcast } from "@/lib/realtime/broadcast";
 import { EVENTS, topics } from "@/lib/realtime/topics";
-import { findNearestPilots } from "@/lib/repositories/pilot-locations";
+import { CHAIN_MAX_DROP_DISTANCE_M, CHAIN_MAX_REMAINING_S } from "@/lib/chaining";
+import { findChainPilots, findNearestPilots } from "@/lib/repositories/pilot-locations";
 import { db } from "@/lib/db";
 import { isNightInIndia } from "@/lib/women-only";
 import {
@@ -45,19 +46,28 @@ export async function offerNextWave(ride: Ride, now: Date): Promise<number> {
   const previous = await findOffersForRide(ride.id);
   const wave = previous.reduce((max, o) => Math.max(max, o.wave), 0) + 1;
 
-  const candidates = await findNearestPilots({
+  const rules = {
     point: { lat: ride.pickupLat, lng: ride.pickupLng },
     tier: ride.tier as RideTier,
-    radiusM: MATCH_RADIUS_M,
     freshSeconds: LOCATION_FRESH_S,
-    limit: WAVE_SIZE,
     // Never re-offer to a Pilot who already saw it, nor to the rider
     // (a demo account can be both).
     excludePilotIds: [...previous.map((o) => o.pilotId), ride.riderId],
     womenOnly: ride.womenOnly,
     riderVerifiedFemale: await isVerifiedFemale(ride.riderId),
     night: isNightInIndia(now),
+  };
+  const free = await findNearestPilots({ ...rules, radiusM: MATCH_RADIUS_M, limit: WAVE_SIZE });
+  // Free Pilots first; the rest of the wave goes to Pilots about to drop
+  // off nearby (docs/PRD.md F12).
+  const chained = await findChainPilots({
+    ...rules,
+    maxDropDistanceM: CHAIN_MAX_DROP_DISTANCE_M,
+    maxRemainingS: CHAIN_MAX_REMAINING_S,
+    limit: WAVE_SIZE - free.length,
+    excludePilotIds: [...rules.excludePilotIds, ...free.map((c) => c.pilotId)],
   });
+  const candidates = [...free, ...chained];
   if (candidates.length === 0) return 0;
 
   const expiresAt = new Date(now.getTime() + OFFER_TTL_MS);

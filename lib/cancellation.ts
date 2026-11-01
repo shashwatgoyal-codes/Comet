@@ -10,6 +10,8 @@ import { rupees, type Paise } from "@/lib/money";
  *   ₹25 — paid to the Pilot for the trip to the pickup.
  * - No fee when the Pilot is at fault (they asked the rider to cancel, or
  *   are heading the wrong way).
+ * - No fee while the ride is queued behind the Pilot's current trip: they
+ *   haven't set off for the pickup yet.
  * The no-show fee (₹40, lib/trip-fees.ts) is separate: the Pilot claims it.
  */
 
@@ -35,9 +37,11 @@ export function cancellationFee(input: {
   requestedAt: Date;
   now: Date;
   reason: CancelReasonId | null;
+  queued?: boolean;
 }): Paise {
-  // Nobody has set off yet: searching, or booked ahead and not yet released.
-  if (input.status === "requested" || input.status === "scheduled") return 0;
+  // Nobody has set off yet: searching, booked ahead and not yet released,
+  // or queued behind the Pilot's current trip.
+  if (input.status === "requested" || input.status === "scheduled" || input.queued) return 0;
   const reason = CANCEL_REASONS.find((r) => r.id === input.reason);
   if (reason?.waivesFee) return 0;
   const sinceBookingS = (input.now.getTime() - input.requestedAt.getTime()) / 1000;

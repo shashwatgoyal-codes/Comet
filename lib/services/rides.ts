@@ -6,7 +6,8 @@ import { AppError } from "@/lib/errors";
 import { splitFare, type RideTier } from "@/lib/fares";
 import { formatRupees } from "@/lib/money";
 import { publicName } from "@/lib/names";
-import type { LatLng } from "@/lib/geo";
+import { haversineM, type LatLng } from "@/lib/geo";
+import { remainingTripS } from "@/lib/chaining";
 import { broadcast } from "@/lib/realtime/broadcast";
 import { EVENTS, topics } from "@/lib/realtime/topics";
 import { getPilotLocation, setPilotAvailable } from "@/lib/repositories/pilot-locations";
@@ -20,6 +21,7 @@ import {
   insertRide,
   transitionRide,
   type RideWithPilot,
+  findNextTripAfter,
 } from "@/lib/repositories/rides";
 import { findUser } from "@/lib/repositories/users";
 import { isActive, type RideStatus } from "@/lib/ride-state";
@@ -67,6 +69,20 @@ export type RideView = {
   arrivedAt: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  /**
+   * The Pilot accepted this ride during another trip and comes when it
+   * ends (docs/PRD.md F12): seconds left on that trip, and how far its
+   * drop-off is from this pickup.
+   */
+  queued: { remainingS: number; fromDropM: number } | null;
+  /** Only in the Pilot's view: the ride they accepted during this trip. */
+  nextTrip?: {
+    rideId: string;
+    farePaise: number;
+    pickupAddress: string;
+    dropAddress: string;
+    fromDropM: number;
+  } | null;
   /** Only ever present in the rider's own view (docs/DATABASE.md §10). */
   rideCode?: string;
   /** Only in the Pilot's view: the rider's first name and Comet ID (docs/SECURITY.md §2). */
@@ -81,10 +97,51 @@ export type RideView = {
   };
 };
 
-export async function toRideView(ride: RideWithPilot, forRider: boolean): Promise<RideView> {
+async function queuedState(ride: RideWithPilot, now: Date): Promise<RideView["queued"]> {
+  if (!ride.isQueued || !ride.chainedAfterRideId) return null;
+  const current = await db.ride.findUnique({
+    where: { id: ride.chainedAfterRideId },
+    select: { startedAt: true, durationS: true, dropLat: true, dropLng: true },
+  });
+  if (!current) return null;
+  return {
+    remainingS: current.startedAt ? remainingTripS(current.startedAt, current.durationS, now) : 0,
+    fromDropM: Math.round(
+      haversineM(
+        { lat: current.dropLat, lng: current.dropLng },
+        { lat: ride.pickupLat, lng: ride.pickupLng },
+      ),
+    ),
+  };
+}
+
+async function nextTripFor(ride: RideWithPilot): Promise<RideView["nextTrip"]> {
+  if (!ride.pilotId) return null;
+  const next = await findNextTripAfter(ride.id, ride.pilotId);
+  if (!next) return null;
+  return {
+    rideId: next.id,
+    farePaise: next.farePaise,
+    pickupAddress: next.pickupAddress,
+    dropAddress: next.dropAddress,
+    fromDropM: Math.round(
+      haversineM(
+        { lat: ride.dropLat, lng: ride.dropLng },
+        { lat: next.pickupLat, lng: next.pickupLng },
+      ),
+    ),
+  };
+}
+
+export async function toRideView(
+  ride: RideWithPilot,
+  forRider: boolean,
+  now: Date = new Date(),
+): Promise<RideView> {
   const pilotLocation = ride.pilot ? await getPilotLocation(ride.pilot.id) : null;
   const profile = ride.pilot?.pilotProfile;
   return {
+    queued: await queuedState(ride, now),
     id: ride.id,
     status: ride.status,
     tier: ride.tier as RideTier,
@@ -114,6 +171,7 @@ export async function toRideView(ride: RideWithPilot, forRider: boolean): Promis
     ...(forRider
       ? { rideCode: ride.rideCode }
       : {
+          nextTrip: await nextTripFor(ride),
           rider: {
             firstName: ride.rider.displayName.split(" ")[0] ?? "Rider",
             cometId: ride.rider.cometId,
@@ -323,7 +381,13 @@ export async function cancelRideAsRider(
     throw new AppError("CONFLICT", "This ride can't be cancelled now.");
   }
 
-  const fee = cancellationFee({ status: ride.status, requestedAt: ride.requestedAt, now, reason });
+  const fee = cancellationFee({
+    status: ride.status,
+    requestedAt: ride.requestedAt,
+    now,
+    reason,
+    queued: ride.isQueued,
+  });
   const label = CANCEL_REASONS.find((r) => r.id === reason)?.label ?? "Cancelled by rider";
   const ok = await transitionRide(ride.id, ride.status as RideStatus, {
     status: "cancelled",
@@ -336,7 +400,8 @@ export async function cancelRideAsRider(
   if (!ok) throw new AppError("CONFLICT", "Your ride changed just now. Please check its status.");
 
   const closed = await closeOtherOffers(ride.id, null, "expired");
-  if (ride.pilotId) await setPilotAvailable(ride.pilotId, true);
+  // A queued ride's Pilot is still on their current trip.
+  if (ride.pilotId && !ride.isQueued) await setPilotAvailable(ride.pilotId, true);
   await addRideEvent(
     ride.id,
     "ride.cancelled",

@@ -89,8 +89,41 @@ export async function findUnpaidRideForPilot(
   });
 }
 
+/** The ride the Pilot is on now; a queued next ride doesn't count. */
 export async function findActiveRideForPilot(pilotId: string): Promise<Ride | null> {
-  return db.ride.findFirst({ where: { pilotId, status: active } });
+  return db.ride.findFirst({ where: { pilotId, status: active, isQueued: false } });
+}
+
+/** The ride waiting for the Pilot's current trip to end, if any. */
+export async function findQueuedRideForPilot(pilotId: string): Promise<Ride | null> {
+  return db.ride.findFirst({ where: { pilotId, status: "accepted", isQueued: true } });
+}
+
+/** The trip that was accepted during this one (queued, or already released). */
+export async function findNextTripAfter(rideId: string, pilotId: string): Promise<Ride | null> {
+  return db.ride.findFirst({
+    where: {
+      chainedAfterRideId: rideId,
+      pilotId,
+      status: { in: ["accepted", "arrived", "in_progress"] },
+    },
+  });
+}
+
+/**
+ * The trip just ended: its queued ride becomes the Pilot's current one.
+ * A single conditional update, so it happens once however often it's called.
+ */
+export async function releaseQueuedRide(afterRideId: string): Promise<Ride | null> {
+  const queued = await db.ride.findFirst({
+    where: { chainedAfterRideId: afterRideId, isQueued: true, status: "accepted" },
+  });
+  if (!queued) return null;
+  const { count } = await db.ride.updateMany({
+    where: { id: queued.id, isQueued: true, status: "accepted" },
+    data: { isQueued: false },
+  });
+  return count === 1 ? { ...queued, isQueued: false } : null;
 }
 
 /** A ride the user takes part in, as rider or assigned Pilot. */
@@ -120,15 +153,23 @@ export async function transitionRide(
 /**
  * Assigns the ride to a Pilot if it's still waiting. Exactly one of any
  * number of concurrent accepts wins. Returns false if the ride was taken,
- * cancelled or expired — or if this Pilot already has an active ride
- * (the one-active-ride-per-Pilot index).
+ * cancelled or expired — or if this Pilot already has an active ride, or
+ * a queued one (the one-active and one-queued-per-Pilot indexes).
  */
-export async function assignRide(rideId: string, pilotId: string, now: Date): Promise<boolean> {
+export async function assignRide(
+  rideId: string,
+  pilotId: string,
+  now: Date,
+  /** The Pilot's trip in progress: this ride waits for it (queued). */
+  queuedBehind: string | null = null,
+): Promise<boolean> {
   try {
     return await transitionRide(rideId, "requested", {
       status: "accepted",
       pilotId,
       acceptedAt: now,
+      isQueued: queuedBehind !== null,
+      chainedAfterRideId: queuedBehind,
     });
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") return false;

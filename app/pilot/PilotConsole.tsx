@@ -1,6 +1,6 @@
 "use client";
 
-import { IndianRupee, Power, Star, X } from "lucide-react";
+import { IndianRupee, Power, Star, X, Zap } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useEffectEvent, useState, useTransition } from "react";
@@ -8,6 +8,7 @@ import { useEffect, useEffectEvent, useState, useTransition } from "react";
 import { DESKTOP_PANEL, SHEET_HANDLE } from "@/components/layout/panel";
 import { LiveMap } from "@/components/map/LiveMap";
 import { Button } from "@/components/ui/button";
+import { bestMatchIndex, farePerKm } from "@/lib/chaining";
 import { TIER_RATES } from "@/lib/fares";
 import { formatRupees } from "@/lib/money";
 import { topics } from "@/lib/realtime/topics";
@@ -105,6 +106,11 @@ export function PilotConsole({
   }
 
   const visible = offers.filter((o) => new Date(o.expiresAt).getTime() > now);
+  const best = bestMatchIndex(visible.map((o) => o.pickupDistanceM));
+
+  function skipAll() {
+    visible.forEach(decline);
+  }
 
   return (
     <div className="relative h-app overflow-hidden">
@@ -156,9 +162,23 @@ export function PilotConsole({
           aria-live="assertive"
         >
           {visible.length > 1 && (
-            <p className="px-2 font-heading text-lg font-bold text-white">
-              {visible.length} ride requests
-            </p>
+            <div className="flex items-center justify-between gap-3 px-2 text-white">
+              <span className="flex flex-col">
+                <span className="font-heading text-[22px] font-bold tracking-tight">
+                  {visible.length} ride requests
+                </span>
+                <span className="text-sm opacity-85">
+                  Pick one — the others go to nearby Pilots
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={skipAll}
+                className="h-10 shrink-0 rounded-full bg-white/15 px-3.5 text-sm font-bold"
+              >
+                Skip all
+              </button>
+            </div>
           )}
           {visible.map((offer, i) => (
             <OfferCard
@@ -168,7 +188,8 @@ export function PilotConsole({
                 0,
                 Math.ceil((new Date(offer.expiresAt).getTime() - now) / 1000),
               )}
-              highlighted={i === 0}
+              highlighted={best === null ? i === 0 : i === best}
+              bestMatch={i === best}
               disabled={pending}
               onAccept={() => accept(offer)}
               onDecline={() => decline(offer)}
@@ -206,6 +227,7 @@ function OfferCard({
   offer,
   secondsLeft,
   highlighted,
+  bestMatch,
   disabled,
   onAccept,
   onDecline,
@@ -213,6 +235,7 @@ function OfferCard({
   offer: OfferView;
   secondsLeft: number;
   highlighted: boolean;
+  bestMatch: boolean;
   disabled: boolean;
   onAccept: () => void;
   onDecline: () => void;
@@ -236,6 +259,12 @@ function OfferCard({
               Women-only
             </span>
           )}
+          {bestMatch && (
+            <span className="flex items-center gap-1 rounded-full bg-brand-soft px-2.5 py-1 text-xs font-bold text-brand-text">
+              <Zap className="size-3 fill-current" aria-hidden />
+              Best match
+            </span>
+          )}
         </span>
         <span
           className={cn(
@@ -248,8 +277,13 @@ function OfferCard({
       </div>
       <div className="flex items-center gap-3">
         <div className="flex flex-1 flex-col gap-0.5">
-          <span className="font-heading text-[28px] font-bold tracking-tight">
-            {formatRupees(offer.farePaise)}
+          <span className="flex items-baseline gap-2">
+            <span className="font-heading text-[28px] font-bold tracking-tight">
+              {formatRupees(offer.farePaise)}
+            </span>
+            <span className="text-[13px] text-muted-foreground">
+              {farePerKm(offer.farePaise, offer.tripDistanceM)}
+            </span>
           </span>
           <span className="text-[13px] text-muted-foreground">
             {offer.pickupDistanceM !== null && `Pickup ${km(offer.pickupDistanceM)} · `}

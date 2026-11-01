@@ -1,5 +1,7 @@
 import "server-only";
 
+import { remainingTripS } from "@/lib/chaining";
+import { db } from "@/lib/db";
 import { AppError } from "@/lib/errors";
 import type { RideTier } from "@/lib/fares";
 import { haversineM, type LatLng } from "@/lib/geo";
@@ -24,6 +26,7 @@ import {
   findRideForParticipant,
   findUnpaidRideForPilot,
   setOfferStatus,
+  findQueuedRideForPilot,
 } from "@/lib/repositories/rides";
 import { refreshRequestedRide } from "@/lib/services/matching";
 import { toRideView } from "@/lib/services/rides";
@@ -93,6 +96,8 @@ export type OfferView = {
   rider: { name: string; cometId: string; rating: number | null };
   /** The rider asked for a woman Pilot. Pilots see only this, nothing about her profile. */
   womenOnly: boolean;
+  /** Offered during a trip: it starts after this drop-off (docs/PRD.md F12). */
+  chained: { afterRider: string; remainingS: number; fromDropM: number } | null;
   expiresAt: string;
 };
 
@@ -106,6 +111,10 @@ export async function listOpenOffers(
   const offers = await findOpenOffersForPilot(pilotId, now);
   for (const o of offers) await refreshRequestedRide(o.ride, now);
   const stillOpen = await findOpenOffersForPilot(pilotId, now);
+  // On a trip, every offer is for the next one.
+  const current = await findActiveRideForPilot(pilotId);
+  const onTrip =
+    current?.status === "in_progress" ? await findRideForParticipant(pilotId, current.id) : null;
   return stillOpen.map((o) => ({
     offerId: o.id,
     rideId: o.rideId,
@@ -126,6 +135,20 @@ export async function listOpenOffers(
         : null,
     },
     womenOnly: o.ride.womenOnly,
+    chained: onTrip
+      ? {
+          afterRider: onTrip.rider.displayName.split(" ")[0] ?? "your rider",
+          remainingS: onTrip.startedAt
+            ? remainingTripS(onTrip.startedAt, onTrip.durationS, now)
+            : 0,
+          fromDropM: Math.round(
+            haversineM(
+              { lat: onTrip.dropLat, lng: onTrip.dropLng },
+              { lat: o.ride.pickupLat, lng: o.ride.pickupLng },
+            ),
+          ),
+        }
+      : null,
     expiresAt: o.expiresAt.toISOString(),
   }));
 }
@@ -139,7 +162,15 @@ export async function acceptOffer(pilotId: string, offerId: string, now: Date = 
     throw new AppError("CONFLICT", "This request is no longer available.");
   }
 
-  const won = await assignRide(offer.rideId, pilotId, now);
+  // During a trip, an accepted ride queues behind it (docs/PRD.md F12).
+  const current = await findActiveRideForPilot(pilotId);
+  if (current && current.status !== "in_progress") {
+    throw new AppError("CONFLICT", "Finish your current pickup first.");
+  }
+  if (current && (await findQueuedRideForPilot(pilotId))) {
+    throw new AppError("CONFLICT", "You already have a next trip queued.");
+  }
+  const won = await assignRide(offer.rideId, pilotId, now, current?.id ?? null);
   if (!won) {
     await setOfferStatus(offer.id, "offered", "taken", now);
     throw new AppError("CONFLICT", "Another Pilot took this ride.");
@@ -148,7 +179,12 @@ export async function acceptOffer(pilotId: string, offerId: string, now: Date = 
   await setOfferStatus(offer.id, "offered", "accepted", now);
   const others = await closeOtherOffers(offer.rideId, offer.id, "taken");
   await setPilotAvailable(pilotId, false);
-  await addRideEvent(offer.rideId, "ride.accepted", { id: pilotId, role: "pilot" });
+  await addRideEvent(
+    offer.rideId,
+    "ride.accepted",
+    { id: pilotId, role: "pilot" },
+    current ? { queuedBehind: current.id } : {},
+  );
   await broadcast(
     {
       topic: topics.ride(offer.rideId),
@@ -184,13 +220,28 @@ export async function getPilotActiveRide(pilotId: string) {
  * Pilot here — the rider pays in their own time.
  */
 export async function getPilotCurrentRide(pilotId: string) {
-  const active = await getPilotActiveRide(pilotId);
-  if (active) return active;
+  const active = await findActiveRideForPilot(pilotId);
   const cash = await findUnpaidRideForPilot(pilotId, "cash");
-  return cash ? toRideView(cash, false) : null;
+  // Collect the cash for the trip just ended before heading to the next.
+  if (cash && (!active || active.chainedAfterRideId === cash.id)) {
+    return toRideView(cash, false);
+  }
+  return active ? getPilotActiveRide(pilotId) : null;
+}
+
+/** "Get requests during trips" (docs/PRD.md F12). */
+export async function setChainRequests(pilotId: string, on: boolean) {
+  await requireApprovedPilot(pilotId);
+  await db.pilotProfile.update({ where: { userId: pilotId }, data: { chainRequests: on } });
 }
 
 export async function getPilotStatus(pilotId: string) {
-  const location = await getPilotLocation(pilotId);
-  return { isOnline: location?.isOnline ?? false };
+  const [location, profile] = await Promise.all([
+    getPilotLocation(pilotId),
+    findPilotProfile(pilotId),
+  ]);
+  return {
+    isOnline: location?.isOnline ?? false,
+    chainRequests: profile?.chainRequests ?? true,
+  };
 }

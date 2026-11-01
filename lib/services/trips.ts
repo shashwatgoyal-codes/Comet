@@ -12,6 +12,7 @@ import {
   findRideForParticipant,
   recordWrongRideCode,
   transitionRide,
+  releaseQueuedRide,
 } from "@/lib/repositories/rides";
 import { chargeCancellation } from "@/lib/repositories/wallet";
 import { chargeOnCompletion } from "@/lib/services/payments";
@@ -48,6 +49,9 @@ export async function getPilotRide(pilotId: string, rideId: string) {
 
 export async function markArrived(pilotId: string, rideId: string, now: Date = new Date()) {
   const ride = await rideForPilot(pilotId, rideId);
+  if (ride.isQueued) {
+    throw new AppError("CONFLICT", "Finish your current trip first. This pickup is next.");
+  }
   if (ride.status !== "accepted")
     throw new AppError("CONFLICT", "You can only arrive once, before the trip.");
   const ok = await transitionRide(ride.id, "accepted", { status: "arrived", arrivedAt: now });
@@ -116,9 +120,15 @@ export async function endTrip(pilotId: string, rideId: string, now: Date = new D
     completedAt: now,
   });
   if (!ok) throw new AppError("CONFLICT", "This ride changed just now.");
-  await setPilotAvailable(pilotId, true);
+  // A next trip accepted during this one starts now (docs/PRD.md F12).
+  const next = await releaseQueuedRide(ride.id);
+  await setPilotAvailable(pilotId, !next);
   await addRideEvent(ride.id, "ride.completed", { id: pilotId, role: "pilot" });
   await announce(ride.id, "completed");
+  if (next) {
+    await addRideEvent(next.id, "ride.released", { id: pilotId, role: "pilot" });
+    await announce(next.id, "accepted");
+  }
   await chargeOnCompletion(ride);
 }
 

@@ -26,6 +26,8 @@ export const promoLookupSchema = z.object({ code: z.string().trim().min(1).max(2
 
 export const rideIdSchema = z.object({ rideId: z.uuid() });
 
+export const setChainRequestsSchema = z.object({ on: z.boolean() });
+
 export const cancelRideSchema = z.object({
   rideId: z.uuid(),
   reason: z.enum(CANCEL_REASON_IDS).nullable().default(null),

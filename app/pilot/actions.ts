@@ -7,9 +7,11 @@ import {
   acceptOffer,
   declineOffer,
   getPilotActiveRide,
+  getPilotStatus,
   goOffline,
   goOnline,
   listOpenOffers,
+  setChainRequests,
   updatePilotLocation,
 } from "@/lib/services/pilots";
 import {
@@ -26,6 +28,7 @@ import {
   locationUpdateSchema,
   offerIdSchema,
   rideIdSchema,
+  setChainRequestsSchema,
   setOnlineSchema,
   startTripSchema,
 } from "@/lib/validation/rides";
@@ -169,5 +172,16 @@ export async function requestPayoutAction(input: unknown) {
     const parsed = payoutSchema.safeParse(input);
     if (!parsed.success) throw new AppError("VALIDATION", "There's nothing to withdraw yet.");
     return requestPayout(user.id, parsed.data.amountPaise, parsed.data.requestId);
+  });
+}
+
+/** "Get requests during trips" (docs/PRD.md F12). */
+export async function setChainRequestsAction(input: unknown) {
+  return runAction("pilot.chain", async () => {
+    const user = await requirePilotUser();
+    const parsed = setChainRequestsSchema.safeParse(input);
+    if (!parsed.success) throw new AppError("VALIDATION", "Couldn't change that setting.");
+    await setChainRequests(user.id, parsed.data.on);
+    return getPilotStatus(user.id);
   });
 }

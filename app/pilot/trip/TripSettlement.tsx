@@ -97,7 +97,7 @@ export function TripSettlement({
           See earnings
         </Link>
         <Button onClick={onDone} className="mt-auto h-[60px] rounded-lg text-lg font-bold">
-          Back to requests
+          {ride.nextTrip ? "Head to next pickup" : "Back to requests"}
         </Button>
       </main>
     );
@@ -128,7 +128,7 @@ export function TripSettlement({
           Rider is paying cash
         </Button>
         <Button onClick={onDone} className="mt-auto h-[60px] rounded-lg text-lg font-bold">
-          Back to requests
+          {ride.nextTrip ? "Head to next pickup" : "Back to requests"}
         </Button>
       </main>
     );

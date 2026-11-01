@@ -11,6 +11,7 @@ import { RatingForm } from "@/components/RatingForm";
 import { SosFlow } from "@/components/safety/SosFlow";
 import { Button } from "@/components/ui/button";
 import { CANCEL_REASONS, cancellationFee, type CancelReasonId } from "@/lib/cancellation";
+import { shortDistance } from "@/lib/chaining";
 import { TIER_RATES } from "@/lib/fares";
 import { formatRupees } from "@/lib/money";
 import { starString } from "@/lib/ratings";
@@ -234,14 +235,27 @@ export function RideTracker({
             <div className="flex items-center justify-between gap-3">
               <div className="flex flex-col gap-1">
                 <h1 className="font-heading text-[22px] font-bold tracking-tight">
-                  {ride.status === "accepted" && "Your Pilot is on the way"}
+                  {ride.status === "accepted" &&
+                    (ride.queued
+                      ? "Your Pilot is finishing a nearby trip"
+                      : "Your Pilot is on the way")}
                   {ride.status === "arrived" && "Your Pilot has arrived"}
                   {ride.status === "in_progress" && `Heading to ${ride.drop.address}`}
                 </h1>
-                <span className="text-sm text-muted-foreground">
+                <span className="text-sm text-muted-foreground" data-testid="trip-subtitle">
                   {ride.status === "in_progress"
                     ? "Sit back — you'll see the fare when you arrive."
-                    : `Meet at ${ride.pickup.address}`}
+                    : ride.queued
+                      ? `They drop off a rider ${
+                          ride.queued.fromDropM < 100
+                            ? "right by you"
+                            : `${shortDistance(ride.queued.fromDropM)} from you`
+                        }, then head here${
+                          ride.queued.remainingS > 0
+                            ? ` · about ${Math.ceil(ride.queued.remainingS / 60)} min`
+                            : ""
+                        }. Cancelling is free until then.`
+                      : `Meet at ${ride.pickup.address}`}
                 </span>
               </div>
               {ride.rideCode && ride.status !== "in_progress" && (
@@ -417,12 +431,14 @@ function CancelSheet({
     requestedAt: new Date(ride.requestedAt),
     now,
     reason,
+    queued: ride.queued !== null,
   });
   const baseFee = cancellationFee({
     status: ride.status,
     requestedAt: new Date(ride.requestedAt),
     now,
     reason: null,
+    queued: ride.queued !== null,
   });
   const pilotFirst = ride.pilot?.name.split(" ")[0] ?? "Your Pilot";
 
@@ -447,7 +463,9 @@ function CancelSheet({
             <b>
               {ride.status === "arrived"
                 ? `${pilotFirst} is at the pickup.`
-                : `${pilotFirst} is on the way.`}
+                : ride.queued
+                  ? `${pilotFirst} is finishing another trip.`
+                  : `${pilotFirst} is on the way.`}
             </b>{" "}
             {baseFee > 0
               ? `A ${formatRupees(baseFee)} fee applies because more than 3 minutes have passed since booking. It goes to ${pilotFirst} for the trip to you.`

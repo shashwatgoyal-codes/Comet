@@ -26,6 +26,7 @@ import {
   startTripAction,
   updateLocationAction,
 } from "../actions";
+import { NextTripPanel } from "./NextTripPanel";
 import { TripSettlement } from "./TripSettlement";
 
 /**
@@ -35,10 +36,12 @@ import { TripSettlement } from "./TripSettlement";
  */
 export function PilotTrip({
   initial,
+  initialChainRequests,
   initialSos,
   isDemoUser,
 }: {
   initial: RideView;
+  initialChainRequests: boolean;
   initialSos: SosView | null;
   isDemoUser: boolean;
 }) {
@@ -278,6 +281,11 @@ export function PilotTrip({
                   ? "Paid from the rider's Comet Wallet when you end the trip."
                   : `The rider pays by ${ride.paymentMethod === "card" ? "card" : "UPI"} at the drop.`}
             </p>
+            <NextTripPanel
+              nextTrip={ride.nextTrip ?? null}
+              initialOn={initialChainRequests}
+              onQueued={refresh}
+            />
             <Button
               onClick={() => run(() => endTripAction({ rideId: ride.id }))}
               disabled={pending}

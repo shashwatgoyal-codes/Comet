@@ -129,3 +129,64 @@ export async function findNearestPilots(params: {
     LIMIT ${limit}
   `;
 }
+
+/**
+ * Pilots who could take this ride next (docs/PRD.md F12): on a trip that
+ * ends within `maxRemainingS`, whose drop-off is within `maxDropDistanceM`
+ * of the pickup, with "Get requests during trips" on and nothing queued
+ * yet. The same tier, freshness and women-only rules as findNearestPilots.
+ * Nearest drop-off first.
+ */
+export async function findChainPilots(params: {
+  point: LatLng;
+  tier: RideTier;
+  maxDropDistanceM: number;
+  maxRemainingS: number;
+  freshSeconds: number;
+  limit: number;
+  excludePilotIds: string[];
+  womenOnly?: boolean;
+  riderVerifiedFemale?: boolean;
+  night?: boolean;
+}): Promise<Candidate[]> {
+  const { point, tier, maxDropDistanceM, maxRemainingS, freshSeconds, limit } = params;
+  if (limit <= 0) return [];
+  const womenOnly = params.womenOnly ?? false;
+  const riderFemale = params.riderVerifiedFemale ?? false;
+  const night = params.night ?? false;
+  const exclude = params.excludePilotIds.length
+    ? params.excludePilotIds
+    : ["00000000-0000-0000-0000-000000000000"];
+  return db.$queryRaw<Candidate[]>`
+    WITH here AS (
+      SELECT ST_SetSRID(ST_MakePoint(${point.lng}, ${point.lat}), 4326)::geography AS g
+    ), trips AS (
+      SELECT r.pilot_id,
+             ST_Distance(
+               ST_SetSRID(ST_MakePoint(r.drop_lng, r.drop_lat), 4326)::geography, here.g
+             )::float8 AS drop_distance
+      FROM rides r CROSS JOIN here
+      WHERE r.status = 'in_progress' AND NOT r.is_queued
+        AND r.started_at + make_interval(secs => r.duration_s) <= now() + make_interval(secs => ${maxRemainingS})
+    )
+    SELECT t.pilot_id AS "pilotId", t.drop_distance AS "distanceM"
+    FROM trips t
+    JOIN pilot_locations pl ON pl.pilot_id = t.pilot_id
+    JOIN pilot_profiles pp ON pp.user_id = t.pilot_id
+    WHERE t.drop_distance <= ${maxDropDistanceM}
+      AND pl.is_online
+      AND pl.updated_at > now() - make_interval(secs => ${freshSeconds})
+      AND pp.status = 'approved' AND pp.chain_requests
+      AND pp.tier = ${tier}::ride_tier
+      AND t.pilot_id <> ALL(${exclude}::uuid[])
+      AND NOT EXISTS (
+        SELECT 1 FROM rides q WHERE q.pilot_id = t.pilot_id AND q.is_queued AND q.status = 'accepted')
+      AND (NOT ${womenOnly} OR EXISTS (
+        SELECT 1 FROM identity_verifications iv
+        WHERE iv.user_id = t.pilot_id AND iv.verified_female))
+      AND (${riderFemale} OR pp.women_passengers_mode = 'off'
+        OR (pp.women_passengers_mode = 'night' AND NOT ${night}))
+    ORDER BY t.drop_distance
+    LIMIT ${limit}
+  `;
+}

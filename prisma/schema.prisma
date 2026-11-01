@@ -190,6 +190,8 @@ model PilotProfile {
   ratingAvg           Decimal?      @map("rating_avg") @db.Decimal(3, 2)
   ratingCount         Int           @default(0) @map("rating_count")
   womenPassengersMode WomenOnlyMode @default(off) @map("women_passengers_mode")
+  /// "Get requests during trips": offers for a next trip near the drop.
+  chainRequests       Boolean       @default(true) @map("chain_requests")
   /// A bot Pilot that drives demo rides (docs/ARCHITECTURE.md §9).
   isSimulated         Boolean       @default(false) @map("is_simulated")
   /// The demo rider this bot serves; null for ambient bots and real Pilots.
@@ -389,6 +391,11 @@ model Ride {
   /// minutes before (lib/scheduling.ts).
   scheduledFor         DateTime?     @map("scheduled_for") @db.Timestamptz
   isDemo               Boolean       @default(false) @map("is_demo")
+  /// Accepted by a Pilot during another trip (docs/PRD.md F12): they come
+  /// once that trip ends. Cleared when it does.
+  isQueued             Boolean       @default(false) @map("is_queued")
+  /// The trip this ride was accepted during. Kept after it's released.
+  chainedAfterRideId   String?       @map("chained_after_ride_id") @db.Uuid
   simulationStartedAt  DateTime?     @map("simulation_started_at") @db.Timestamptz
   requestedAt          DateTime      @default(now()) @map("requested_at") @db.Timestamptz
   acceptedAt           DateTime?     @map("accepted_at") @db.Timestamptz
@@ -411,6 +418,8 @@ model Ride {
   promo         PromoCode?       @relation(fields: [promoId], references: [id], onDelete: Restrict)
   redemption    PromoRedemption?
   chatMessages  ChatMessage[]
+  chainedAfter  Ride?            @relation("RideChain", fields: [chainedAfterRideId], references: [id], onDelete: Restrict)
+  chainedNext   Ride[]           @relation("RideChain")
   walletEntries WalletEntry[]
   payments      Payment[]
   ratings       Rating[]
